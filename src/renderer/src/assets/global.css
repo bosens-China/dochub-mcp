@@ -1,0 +1,50 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'IBM Plex Sans', 'PingFang SC', system-ui, sans-serif;
+  color: #141820;
+  background: #f6f4ef;
+  -webkit-font-smoothing: antialiased;
+  user-select: text;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* sync log tabs — horizontal scroll when many documents */
+.sync-source-tabs .ant-tabs-nav,
+.sync-doc-tabs .ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+.sync-source-tabs .ant-tabs-nav-wrap,
+.sync-doc-tabs .ant-tabs-nav-wrap {
+  overflow: auto hidden;
+}
+
+.sync-doc-tabs .ant-tabs-tab {
+  max-width: 12rem;
+}
