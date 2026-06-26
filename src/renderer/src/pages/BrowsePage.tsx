@@ -30,10 +30,7 @@ export function BrowsePage(): React.JSX.Element {
   const selectedPath = manualPath ?? searchParams.path ?? null
 
   const { data: tree = [], isLoading: treeLoading } = useDocTree(activeSourceId)
-  const { data: content = '', isLoading: contentLoading } = useDocContent(
-    activeSourceId,
-    selectedPath
-  )
+  const { data: doc, isLoading: contentLoading } = useDocContent(activeSourceId, selectedPath)
 
   const activeSource = sources.find((s) => s.id === activeSourceId)
 
@@ -103,7 +100,19 @@ export function BrowsePage(): React.JSX.Element {
               <Spin description="加载文档…" />
             </div>
           ) : (
-            <MarkdownPreview content={content} />
+            <div className="h-full flex flex-col min-h-0">
+              <header className="shrink-0 px-6 pt-5 pb-3 border-b border-archive-line/60">
+                <h2 className="font-display text-xl text-archive-ink m-0 font-semibold leading-snug">
+                  {doc?.title ?? selectedPath}
+                </h2>
+                {doc?.title && selectedPath && (
+                  <p className="text-xs text-archive-muted m-0 mt-1 font-mono truncate">
+                    {selectedPath}
+                  </p>
+                )}
+              </header>
+              <MarkdownPreview content={doc?.body ?? ''} />
+            </div>
           )}
         </section>
       </div>

@@ -54,3 +54,8 @@ ${body.trim()}
 export function extractDocBody(raw: string): string {
   return parseDocFile(raw)?.body ?? raw
 }
+
+export function extractDocTitle(raw: string, fallback: string): string {
+  const title = parseDocFile(raw)?.frontmatter.title.trim()
+  return title || fallback
+}

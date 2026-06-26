@@ -2,6 +2,7 @@ import type { DocHubAPI } from '@shared/ipc/api-types'
 import type {
   AddSourceInput,
   AppSettings,
+  DocContent,
   DocSource,
   DocTreeNode,
   SearchResult,
@@ -51,7 +52,7 @@ export function fetchDocTree(sourceId: string): Promise<DocTreeNode[]> {
   return getApi().getDocTree(sourceId)
 }
 
-export function fetchDocContent(sourceId: string, path: string): Promise<string> {
+export function fetchDocContent(sourceId: string, path: string): Promise<DocContent> {
   return getApi().readDocument(sourceId, path)
 }
 

@@ -123,6 +123,13 @@ export interface DocTreeNode {
   children?: DocTreeNode[]
 }
 
+/** 文档阅读内容（含网页 title） */
+export interface DocContent {
+  path: string
+  title: string
+  body: string
+}
+
 export type SyncPhase = 'preparing' | 'discovering' | 'crawling' | 'finalizing'
 
 export interface SyncProgress {

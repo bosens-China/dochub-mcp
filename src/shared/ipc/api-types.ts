@@ -4,6 +4,7 @@ import type {
   SpaDetectionResult,
   SourceDetail,
   AppSettings,
+  DocContent,
   DocSource,
   DocTreeNode,
   SearchResult,
@@ -21,7 +22,7 @@ export interface DocHubAPI {
   deleteSource(id: string): Promise<void>
   triggerSync(sourceId: string): Promise<void>
   getDocTree(sourceId: string): Promise<DocTreeNode[]>
-  readDocument(sourceId: string, path: string): Promise<string>
+  readDocument(sourceId: string, path: string): Promise<DocContent>
   getSyncProgress(): Promise<SyncProgress[]>
   getSyncLogs(): Promise<SyncLogEntry[]>
   getSettings(): Promise<AppSettings>

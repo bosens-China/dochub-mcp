@@ -11,7 +11,7 @@ import { getCheckpointPath } from '../../config/paths'
 import { readSourceRecord, sourceDocsDir, sourceTreePath, writeSourceRecord } from '../source/store'
 import { runConcurrentCrawl } from '../sync/orchestrator'
 import { finalizeSourceDocuments } from '../sync/finalize'
-import { extractDocBody } from '../converter/doc-frontmatter'
+import { extractDocBody, extractDocTitle } from '../converter/doc-frontmatter'
 
 const activeSyncs = new Map<string, SyncProgress>()
 const syncLocks = new Set<string>()
@@ -31,7 +31,10 @@ export function getAllActiveSyncProgress(): SyncProgress[] {
   return [...activeSyncs.values()]
 }
 
-function patchProgress(sourceId: string, patch: Partial<SyncProgress> & Pick<SyncProgress, 'phase' | 'message'>): void {
+function patchProgress(
+  sourceId: string,
+  patch: Partial<SyncProgress> & Pick<SyncProgress, 'phase' | 'message'>
+): void {
   const prev = activeSyncs.get(sourceId)
   activeSyncs.set(sourceId, {
     sourceId,
@@ -255,7 +258,11 @@ export async function listDocTree(
         nodes.push({ key: rel, title: entry.name })
         await walk(join(dir, entry.name), rel)
       } else if (entry.name.endsWith('.md')) {
-        nodes.push({ key: `docs/${rel}`, title: entry.name, isLeaf: true })
+        const fullPath = join(dir, entry.name)
+        const raw = await readFile(fullPath, 'utf8')
+        const fallback = entry.name.replace(/\.md$/, '')
+        const title = extractDocTitle(raw, fallback)
+        nodes.push({ key: `docs/${rel}`, title, isLeaf: true })
       }
     }
   }
@@ -263,18 +270,31 @@ export async function listDocTree(
   return nodes
 }
 
-export async function readDocFile(
+export async function readDocContent(
   sourceId: string,
   docPath: string,
   config: AppConfig
-): Promise<string> {
+): Promise<{ path: string; title: string; body: string }> {
   const relativePath = docPath.replace(/^docs\//, '')
   const fullPath = join(sourceDocsDir(sourceId, config), relativePath)
   if (!existsSync(fullPath)) {
     throw new Error('文档不存在')
   }
   const raw = await readFile(fullPath, 'utf8')
-  return extractDocBody(raw)
+  const fallback = relativePath.split('/').pop()?.replace(/\.md$/, '') ?? docPath
+  const title = extractDocTitle(raw, fallback)
+  const body = extractDocBody(raw)
+  return { path: docPath, title, body }
+}
+
+/** 返回文档正文 */
+export async function readDocFile(
+  sourceId: string,
+  docPath: string,
+  config: AppConfig
+): Promise<string> {
+  const doc = await readDocContent(sourceId, docPath, config)
+  return doc.body
 }
 
 export async function deleteRemovedDocs(

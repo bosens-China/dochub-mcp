@@ -8,6 +8,7 @@ import {
 import type {
   AddSourceInput,
   AppSettings,
+  DocContent,
   DocSource,
   DocTreeNode,
   SearchResult,
@@ -143,7 +144,7 @@ export function useDocTree(sourceId: string | null): UseQueryResult<DocTreeNode[
 export function useDocContent(
   sourceId: string | null,
   path: string | null
-): UseQueryResult<string> {
+): UseQueryResult<DocContent | null> {
   return useQuery({
     queryKey: queryKeys.docContent(sourceId ?? 'none', path ?? 'none'),
     queryFn: () => fetchDocContent(sourceId ?? '', path ?? ''),

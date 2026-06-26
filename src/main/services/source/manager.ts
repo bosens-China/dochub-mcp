@@ -2,6 +2,7 @@ import type { AppConfig } from '@shared/types/config'
 import type {
   AddSourceInput,
   AppSettings,
+  DocContent,
   DocSource,
   DocTreeNode,
   SearchResult,
@@ -24,7 +25,7 @@ import {
   getAllActiveSyncProgress,
   getSyncProgress,
   listDocTree,
-  readDocFile,
+  readDocContent,
   runSourceSync
 } from '../sync/runner'
 import { readSyncLogs } from '../sync/persistence'
@@ -44,14 +45,18 @@ function buildTree(nodes: Array<{ key: string; title: string; isLeaf?: boolean }
       path = path ? `${path}/${parts[i]}` : parts[i]!
       let existing = map.get(path)
       if (!existing) {
+        const isLast = i === parts.length - 1
         existing = {
           key: path,
-          title: parts[i]!,
-          isLeaf: i === parts.length - 1 ? node.isLeaf : false,
+          title: isLast && node.isLeaf ? node.title : parts[i]!,
+          isLeaf: isLast ? node.isLeaf : false,
           children: []
         }
         map.set(path, existing)
         current.push(existing)
+      } else if (i === parts.length - 1 && node.isLeaf) {
+        existing.title = node.title
+        existing.isLeaf = true
       }
       current = existing.children ?? []
     }
@@ -87,7 +92,12 @@ function toSyncLogEntries(
     sourceId: line.sourceId,
     sourceName: nameMap.get(line.sourceId) ?? line.sourceId,
     action: line.action,
-    level: line.action === 'fail' || line.action === 'domain_halt' ? 'error' : line.action === 'delete' ? 'warn' : 'info',
+    level:
+      line.action === 'fail' || line.action === 'domain_halt'
+        ? 'error'
+        : line.action === 'delete'
+          ? 'warn'
+          : 'info',
     message:
       line.message ??
       (line.reason === 'content_unchanged'
@@ -96,7 +106,7 @@ function toSyncLogEntries(
           ? '删除：远端已移除'
           : line.reason === 'domain_failure_threshold'
             ? '域名熔断：失败 URL 达到阈值'
-            : line.reason ?? line.action),
+            : (line.reason ?? line.action)),
     timestamp: line.ts,
     url: line.url,
     path: line.path,
@@ -174,8 +184,8 @@ export class SourceManager {
     return buildTree(nodes)
   }
 
-  async readDocument(sourceId: string, path: string): Promise<string> {
-    return readDocFile(sourceId, path, this.cfg())
+  async readDocument(sourceId: string, path: string): Promise<DocContent> {
+    return readDocContent(sourceId, path, this.cfg())
   }
 
   getSyncProgress(sourceId?: string): SyncProgress | SyncProgress[] | null {

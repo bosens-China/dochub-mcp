@@ -8,6 +8,7 @@ export type {
   SourceDetail,
   AppSettings,
   CrawlMode,
+  DocContent,
   DocSource,
   DocTreeNode,
   SearchResult,
