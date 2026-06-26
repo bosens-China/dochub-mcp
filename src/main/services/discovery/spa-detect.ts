@@ -1,6 +1,7 @@
 import { load } from 'cheerio'
 import type { CrawlConfig } from '@shared/types/config'
 import type { CrawlMode } from '@shared/types'
+import { SPA_MARKDOWN_PREVIEW_THRESHOLD } from '@shared/constants/spa-detection'
 import { fetchUrl, type FetchOptions } from '../crawler/fetcher'
 import { htmlToMd } from '../converter/html-to-md'
 
@@ -20,7 +21,10 @@ export interface SpaDetectionResult {
   previewCharCount: number
 }
 
-function scoreSignals(html: string): { score: number; signals: SpaSignal[] } {
+export function scoreSpaDetection(
+  html: string,
+  previewCharCount: number
+): { score: number; signals: SpaSignal[] } {
   const $ = load(html)
   const bodyText = $('body').text().replace(/\s+/g, ' ').trim()
   const charCount = bodyText.length
@@ -28,6 +32,12 @@ function scoreSignals(html: string): { score: number; signals: SpaSignal[] } {
   const htmlLower = html.toLowerCase()
 
   const signals: SpaSignal[] = [
+    {
+      id: 'low_markdown_preview',
+      weight: 45,
+      hit: previewCharCount < SPA_MARKDOWN_PREVIEW_THRESHOLD,
+      label: `Markdown 预览过短（<${SPA_MARKDOWN_PREVIEW_THRESHOLD} 字符，当前 ${previewCharCount}）`
+    },
     {
       id: 'low_body_text',
       weight: 30,
@@ -99,13 +109,15 @@ export async function detectSpa(
 ): Promise<SpaDetectionResult> {
   const fetchOpts: FetchOptions = { crawl, customHeaders }
   const result = await fetchUrl(seedUrl, fetchOpts)
-  const { score, signals } = scoreSignals(result.body)
-  const confidence = confidenceFromScore(score)
+  const pageTitle = load(result.body)('title').first().text().trim()
   const previewMarkdown = htmlToMd({
     html: result.body,
     url: result.finalUrl,
-    title: load(result.body)('title').first().text().trim()
+    title: pageTitle
   })
+  const previewCharCount = previewMarkdown.length
+  const { score, signals } = scoreSpaDetection(result.body, previewCharCount)
+  const confidence = confidenceFromScore(score)
 
   return {
     confidence,
@@ -113,6 +125,6 @@ export async function detectSpa(
     signals,
     recommendedMode: recommendedMode(confidence),
     previewMarkdown,
-    previewCharCount: previewMarkdown.length
+    previewCharCount
   }
 }

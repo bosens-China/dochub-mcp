@@ -5,11 +5,19 @@ import '@renderer/assets/markdown.css'
 
 interface MarkdownPreviewProps {
   content: string
+  /** 嵌入弹窗等场景时可覆盖默认布局类名 */
+  className?: string
 }
 
-export function MarkdownPreview({ content }: MarkdownPreviewProps): React.JSX.Element {
+const defaultClassName =
+  'markdown-preview prose prose-stone max-w-none font-body px-6 py-4 overflow-y-auto flex-1 min-h-0'
+
+export function MarkdownPreview({
+  content,
+  className = defaultClassName
+}: MarkdownPreviewProps): React.JSX.Element {
   return (
-    <article className="markdown-preview prose prose-stone max-w-none font-body px-6 py-4 overflow-y-auto flex-1 min-h-0">
+    <article className={className}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
         {content}
       </ReactMarkdown>
