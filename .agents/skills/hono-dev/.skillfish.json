@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "hono-dev",
+  "owner": "outfitter-dev",
+  "repo": "agents",
+  "path": "plugins/outfitter/skills/hono-dev",
+  "branch": "main",
+  "sha": "965accad3b48c098cbc9e1a9e903403de9c5dc44",
+  "source": "manual"
+}

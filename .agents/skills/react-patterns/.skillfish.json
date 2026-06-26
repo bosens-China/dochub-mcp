@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "react-patterns",
+  "owner": "madappgang",
+  "repo": "claude-code",
+  "path": "plugins/frontend/skills/react-patterns",
+  "branch": "main",
+  "sha": "bf099f6d02ce782337659575f27f678d644decea",
+  "source": "manual"
+}
