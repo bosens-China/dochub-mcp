@@ -41,7 +41,9 @@ export const SourceSyncSchema = z.object({
   lastSyncAt: z.string().nullable().default(null),
   lastSyncDurationMs: z.number().nullable().default(null),
   pageCount: z.number().default(0),
-  failedUrlCount: z.number().default(0)
+  failedUrlCount: z.number().default(0),
+  /** 上次以 SSR 模式同步时检测到疑似 SPA，建议改用 SPA 模式。 */
+  needsSpa: z.boolean().default(false)
 })
 
 export const SourceRecordSchema = z.object({
@@ -53,7 +55,11 @@ export const SourceRecordSchema = z.object({
     domain: z.string(),
     llmsFullUrl: z.string().optional(),
     llmsUrl: z.string().optional(),
-    sitemapUrl: z.string().optional()
+    sitemapUrl: z.string().optional(),
+    /** 站点元信息，同步时从起始页抓取。 */
+    siteTitle: z.string().optional(),
+    charset: z.string().optional(),
+    lang: z.string().optional()
   }),
   crawl: SourceCrawlSchema,
   sync: SourceSyncSchema,
@@ -71,6 +77,8 @@ export interface AddSourceInput {
   name: string
   seedUrl: string
   crawlMode: CrawlMode
+  maxPages?: number | null
+  pathPrefix?: string
 }
 
 export interface UpdateSourceInput {
@@ -83,6 +91,8 @@ export interface UpdateSourceInput {
   respectRobots?: boolean
   concurrency?: number
   maxRetriesPerUrl?: number
+  maxPages?: number | null
+  pathPrefix?: string
 }
 
 export interface SpaDetectionResult {
@@ -106,6 +116,8 @@ export interface DocSource {
   failedCount: number
   crawlMode: CrawlMode
   spineColor: string
+  /** 上次 SSR 同步检测到疑似 SPA，UI 应提示切换 SPA 模式。 */
+  needsSpa: boolean
 }
 
 export interface SourceDetail extends DocSource {
@@ -114,6 +126,11 @@ export interface SourceDetail extends DocSource {
   respectRobots: boolean
   concurrency?: number
   maxRetriesPerUrl?: number
+  maxPages?: number | null
+  /** 站点元信息（同步时抓取，可能未知）。 */
+  siteTitle?: string
+  siteCharset?: string
+  siteLang?: string
 }
 
 export interface DocTreeNode {
@@ -145,7 +162,14 @@ export interface SyncProgress {
 
 export type SyncLogLevel = 'info' | 'warn' | 'error'
 
-export type SyncLogAction = 'fetch' | 'skip' | 'update' | 'delete' | 'fail' | 'domain_halt'
+export type SyncLogAction =
+  | 'fetch'
+  | 'skip'
+  | 'update'
+  | 'delete'
+  | 'fail'
+  | 'domain_halt'
+  | 'pause'
 
 export interface SyncLogEntry {
   id: string

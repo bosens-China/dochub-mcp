@@ -7,10 +7,12 @@ import {
 } from '@tanstack/react-query'
 import type {
   AddSourceInput,
+  AppLogEntry,
   AppSettings,
   DocContent,
   DocSource,
   DocTreeNode,
+  McpStatus,
   SearchResult,
   SourceDetail,
   SpaDetectionResult,
@@ -22,13 +24,16 @@ import {
   addSource,
   deleteSource,
   detectSpa,
+  fetchAppLogs,
   fetchDocContent,
   fetchDocTree,
+  fetchMcpStatus,
   fetchSettings,
   fetchSource,
   fetchSources,
   fetchSyncLogs,
   fetchSyncProgress,
+  pauseSync,
   searchDocuments,
   testMcpConnection,
   triggerSync,
@@ -133,6 +138,18 @@ export function useTriggerSync(): UseMutationResult<void, Error, string> {
   })
 }
 
+export function usePauseSync(): UseMutationResult<void, Error, string> {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sourceId: string) => pauseSync(sourceId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sources })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.syncProgress })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.syncLogs })
+    }
+  })
+}
+
 export function useDocTree(sourceId: string | null): UseQueryResult<DocTreeNode[]> {
   return useQuery({
     queryKey: queryKeys.docTree(sourceId ?? 'none'),
@@ -163,6 +180,22 @@ export function useSettings(): UseQueryResult<AppSettings> {
   return useQuery({
     queryKey: queryKeys.settings,
     queryFn: fetchSettings
+  })
+}
+
+export function useAppLogs(): UseQueryResult<AppLogEntry[]> {
+  return useQuery({
+    queryKey: queryKeys.appLogs,
+    queryFn: fetchAppLogs,
+    refetchInterval: 3000
+  })
+}
+
+export function useMcpStatus(): UseQueryResult<McpStatus> {
+  return useQuery({
+    queryKey: queryKeys.mcpStatus,
+    queryFn: fetchMcpStatus,
+    refetchInterval: 5000
   })
 }
 

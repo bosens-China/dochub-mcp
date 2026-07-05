@@ -2,6 +2,7 @@ import { Tray, Menu, BrowserWindow, app, nativeImage } from 'electron'
 import icon from '../../../resources/icon.png?asset'
 import { readConfigSync } from '../config/sync-load'
 import { sourceManager } from '../services/source/manager'
+import { getMcpStatus } from '../services/mcp/lifecycle'
 
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
@@ -24,6 +25,13 @@ function syncStatusLabel(): string {
   return '空闲'
 }
 
+function mcpStatusLabel(): string {
+  const status = getMcpStatus()
+  if (!status.enabled) return 'MCP：已关闭'
+  if (status.listening) return `MCP：运行中 :${status.port}`
+  return `MCP：未监听${status.error ? `（${status.error}）` : ''}`
+}
+
 function buildMenu(): Menu {
   return Menu.buildFromTemplate([
     {
@@ -31,7 +39,11 @@ function buildMenu(): Menu {
       click: () => showMainWindow()
     },
     {
-      label: syncStatusLabel(),
+      label: `同步：${syncStatusLabel()}`,
+      enabled: false
+    },
+    {
+      label: mcpStatusLabel(),
       enabled: false
     },
     { type: 'separator' },

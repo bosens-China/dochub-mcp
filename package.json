@@ -30,6 +30,7 @@
     "@fontsource/ibm-plex-sans": "^5.2.8",
     "@fontsource/literata": "^5.2.8",
     "@mdream/js": "^1.4.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@tanstack/react-query": "^5.101.1",
     "@tanstack/react-router": "^1.170.16",
     "ahooks": "^3.9.7",
@@ -91,9 +92,10 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "better-sqlite3",
       "electron",
-      "esbuild",
-      "better-sqlite3"
+      "electron-winstaller",
+      "esbuild"
     ]
   },
   "lint-staged": {

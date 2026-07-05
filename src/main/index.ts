@@ -11,6 +11,9 @@ import {
 } from './security/window-hardening'
 import { registerDeveloperShortcuts } from './dev/shortcuts'
 import { createTray, setMainWindow } from './tray'
+import { loadConfig } from './config'
+import { setLoggerConfig, logger } from './services/logger/app-logger'
+import { startMcpServer, stopMcpServer } from './services/mcp/lifecycle'
 
 function devRendererOrigin(): string | null {
   if (!is.dev) return null
@@ -66,6 +69,17 @@ app.whenReady().then(async () => {
 
   await registerIpcHandlers()
 
+  // Logger + MCP server share the loaded config (registerIpcHandlers already
+  // initialized SourceManager with it; loadConfig re-reads the same file).
+  const config = await loadConfig()
+  setLoggerConfig(config)
+  logger.info('app', 'DocHub 主进程已就绪')
+  if (config.mcp.enabled && config.mcp.autoStart) {
+    await startMcpServer(config).catch(() => {
+      /* startup error already logged; UI surfaces it via mcp:getStatus */
+    })
+  }
+
   createWindow()
   createTray()
 
@@ -80,4 +94,8 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   // 托盘常驻：非 macOS 也不自动退出
+})
+
+app.on('before-quit', () => {
+  void stopMcpServer()
 })

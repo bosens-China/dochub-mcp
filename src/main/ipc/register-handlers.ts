@@ -1,8 +1,11 @@
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc/channels'
 import { mcpHealthUrl } from '@shared/constants/mcp'
-import type { AddSourceInput, AppSettings, UpdateSourceInput } from '@shared/types'
+import type { AddSourceInput, AppSettings, CrawlMode, UpdateSourceInput } from '@shared/types'
 import { sourceManager } from '../services/source/manager'
+import { loadConfig } from '../config'
+import { getMcpStatus, restartMcpServer } from '../services/mcp/lifecycle'
+import { readAppLogs, setLoggerConfig } from '../services/logger/app-logger'
 
 const MCP_TEST_TIMEOUT_MS = 5_000
 
@@ -34,7 +37,13 @@ function assertAddSourceInput(input: unknown): AddSourceInput {
   if (!['ssr', 'spa', 'auto'].includes(crawlMode)) {
     throw new Error('无效的抓取模式')
   }
-  return { name: name.trim(), seedUrl: seedUrl.trim(), crawlMode }
+  return {
+    name: name.trim(),
+    seedUrl: seedUrl.trim(),
+    crawlMode,
+    maxPages: (input as AddSourceInput).maxPages ?? null,
+    pathPrefix: (input as AddSourceInput).pathPrefix?.trim()
+  }
 }
 
 function assertUpdateSourceInput(input: unknown): UpdateSourceInput {
@@ -63,7 +72,9 @@ function assertUpdateSourceInput(input: unknown): UpdateSourceInput {
     excludePatterns: raw.excludePatterns,
     respectRobots: raw.respectRobots,
     concurrency: raw.concurrency,
-    maxRetriesPerUrl: raw.maxRetriesPerUrl
+    maxRetriesPerUrl: raw.maxRetriesPerUrl,
+    maxPages: raw.maxPages,
+    pathPrefix: raw.pathPrefix?.trim()
   }
 }
 
@@ -133,6 +144,16 @@ export async function registerIpcHandlers(): Promise<void> {
     return sourceManager.detectSpa(seedUrl.trim())
   })
 
+  ipcMain.handle(IPC_CHANNELS.sources.previewCrawl, (_event, url: unknown, mode: unknown) => {
+    if (typeof url !== 'string' || !url.trim()) {
+      throw new Error('无效的 URL')
+    }
+    if (typeof mode !== 'string' || !['ssr', 'spa', 'auto'].includes(mode)) {
+      throw new Error('无效的模式')
+    }
+    return sourceManager.previewCrawl(url.trim(), mode as CrawlMode)
+  })
+
   ipcMain.handle(IPC_CHANNELS.sources.delete, (_event, id: unknown) => {
     if (typeof id !== 'string' || !id) {
       throw new Error('无效的文档源 ID')
@@ -145,6 +166,13 @@ export async function registerIpcHandlers(): Promise<void> {
       throw new Error('无效的文档源 ID')
     }
     sourceManager.triggerSync(sourceId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.sources.pauseSync, (_event, sourceId: unknown) => {
+    if (typeof sourceId !== 'string' || !sourceId) {
+      throw new Error('无效的文档源 ID')
+    }
+    return sourceManager.pauseSync(sourceId)
   })
 
   ipcMain.handle(IPC_CHANNELS.docs.tree, (_event, sourceId: unknown) => {
@@ -164,6 +192,16 @@ export async function registerIpcHandlers(): Promise<void> {
     return sourceManager.readDocument(sourceId, path)
   })
 
+  ipcMain.handle(IPC_CHANNELS.docs.openFolder, (_event, sourceId: unknown, path: unknown) => {
+    if (typeof sourceId !== 'string' || !sourceId) {
+      throw new Error('无效的文档源 ID')
+    }
+    if (typeof path !== 'string' || !path) {
+      throw new Error('无效的文件路径')
+    }
+    return sourceManager.openFolder(sourceId, path)
+  })
+
   ipcMain.handle(IPC_CHANNELS.sync.progress, () => {
     const result = sourceManager.getSyncProgress()
     return Array.isArray(result) ? result : result ? [result] : []
@@ -173,9 +211,26 @@ export async function registerIpcHandlers(): Promise<void> {
 
   ipcMain.handle(IPC_CHANNELS.settings.get, () => sourceManager.getSettings())
 
-  ipcMain.handle(IPC_CHANNELS.settings.update, (_event, partial: unknown) => {
-    return sourceManager.updateSettings(assertSettingsPartial(partial))
+  ipcMain.handle(IPC_CHANNELS.settings.update, async (_event, partial: unknown) => {
+    const validated = assertSettingsPartial(partial)
+    const settings = await sourceManager.updateSettings(validated)
+    // Re-point logger + restart MCP when relevant config changed.
+    if (validated.dataDir !== undefined || validated.mcp !== undefined) {
+      const config = await loadConfig()
+      setLoggerConfig(config)
+      if (validated.mcp !== undefined) {
+        await restartMcpServer(config)
+      }
+    }
+    return settings
   })
+
+  ipcMain.handle(IPC_CHANNELS.logs.app, async () => {
+    const config = await loadConfig()
+    return readAppLogs(config)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.mcp.getStatus, () => getMcpStatus())
 
   ipcMain.handle(IPC_CHANNELS.docs.search, (_event, query: unknown, sourceId: unknown) => {
     if (typeof query !== 'string' || !query.trim()) {

@@ -56,8 +56,10 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
       )
     }
 
-    return <div key={resetKey} className="contents">
-      {children}
-    </div>
+    return (
+      <div key={resetKey} className="contents">
+        {children}
+      </div>
+    )
   }
 }

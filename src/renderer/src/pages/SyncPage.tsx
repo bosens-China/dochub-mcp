@@ -1,10 +1,12 @@
+import { AppLogPanel } from '@renderer/components/sync/AppLogPanel'
 import { SyncLogTabs } from '@renderer/components/sync/SyncLogTabs'
 import { SyncProgressPanel } from '@renderer/components/sync/SyncProgressPanel'
-import { useSources, useSyncLogs, useSyncProgress } from '@renderer/hooks/use-app-data'
+import { useAppLogs, useSources, useSyncLogs, useSyncProgress } from '@renderer/hooks/use-app-data'
 
 export function SyncPage(): React.JSX.Element {
   const { data: progressList = [] } = useSyncProgress()
   const { data: logs = [], isLoading } = useSyncLogs()
+  const { data: appLogs = [], isLoading: appLogsLoading } = useAppLogs()
   const { data: sources = [] } = useSources()
 
   return (
@@ -22,6 +24,13 @@ export function SyncPage(): React.JSX.Element {
           <h2 className="font-display text-lg text-archive-ink mb-4 mt-0">同步日志</h2>
           <div className="archive-panel p-4">
             <SyncLogTabs logs={logs} sources={sources} isLoading={isLoading} />
+          </div>
+        </section>
+
+        <section>
+          <h2 className="font-display text-lg text-archive-ink mb-4 mt-0">应用日志</h2>
+          <div className="archive-panel p-4">
+            <AppLogPanel logs={appLogs} isLoading={appLogsLoading} />
           </div>
         </section>
       </div>

@@ -10,7 +10,7 @@
 - [x] 主进程 / 渲染进程 / shared 模块划分
 - [x] `~/dochub` 数据目录初始化与迁移逻辑
 - [x] 全局配置读写（`config.json`）
-- [ ] 日志系统（文件 + 渲染进程展示）
+- [x] 日志系统（文件 + 渲染进程展示）
 
 ## 数据层
 
@@ -26,16 +26,16 @@
 ## URL 发现
 
 - [x] seed URL 解析（domain + path_prefix scope）
-- [ ] 站点元信息抓取（title、charset、lang）
+- [x] 站点元信息抓取（title、charset、lang）
 - [x] `llms-full.txt` / `llms.txt` 发现与解析
 - [x] llms 解析失败 → 跳过逻辑
 - [x] `sitemap.xml` 发现与 URL 提取
 - [x] scope 内 URL 过滤
 - [x] BFS 链接跟随（SSR，限 scope 前缀）
-- [ ] 域名级 discovery 缓存（同域名多源复用）
+- [x] 域名级 discovery 缓存（同域名多源复用）
 - [x] SPA 特征检测（首屏启发式，见 spa-detection.md）
 - [x] 添加源：首屏预览 + 用户确认 crawl.mode
-- [ ] v1：likely_spa 警告 + needs_spa 标记
+- [x] v1：likely_spa 警告 + needs_spa 标记
 
 ## 爬取引擎（SSR）
 
@@ -64,19 +64,22 @@
 
 ## MCP Server
 
-- [ ] `@modelcontextprotocol/server` + `@modelcontextprotocol/hono` + Hono 集成
-- [ ] `@hono/node-server` 启停（绑定 127.0.0.1:8276）
-- [ ] `GET /health` 路由（见 [http-api.md](../shared/http-api.md)）
-- [ ] 设置页「测试连接」调用 /health
-- [ ] MCP 开关（`mcp.enabled`）与端口配置 UI，默认端口 **8276**
-- [ ] 修改端口 / 开关时 MCP 服务 restart
-- [ ] 托盘显示 MCP 运行状态
-- [ ] `list_sources`
-- [ ] `list_source_tree`
-- [ ] `read_document`
-- [ ] `search_documents`（keyword only）
-- [ ] `get_sync_status`（可选）
-- [ ] semantic / hybrid 模式返回明确错误（引导 v2）
+> 实现改用官方 `@modelcontextprotocol/sdk`（内置 `StreamableHTTPServerTransport`）+ Node `http`，
+> 取代文档中已废弃的 `@modelcontextprotocol/hono` 方案。见 `src/main/services/mcp/`。
+
+- [x] `@modelcontextprotocol/sdk` + Node `http` 集成（Streamable HTTP，无状态）
+- [x] HTTP 服务启停（绑定 127.0.0.1:8276）
+- [x] `GET /health` 路由（见 [http-api.md](../shared/http-api.md)）
+- [x] 设置页「测试连接」调用 /health
+- [x] MCP 开关（`mcp.enabled`）与端口配置 UI，默认端口 **8276**
+- [x] 修改端口 / 开关时 MCP 服务 restart
+- [x] 托盘显示 MCP 运行状态
+- [x] `list_sources`
+- [x] `list_source_tree`
+- [x] `read_document`
+- [x] `search_documents`（keyword only）
+- [x] `get_sync_status`（可选）
+- [x] semantic / hybrid 模式返回明确错误（引导 v2）
 
 ## 客户端 UI
 
@@ -91,8 +94,8 @@
 
 ## 测试与发布
 
-- [ ] 单元测试：URL scope 过滤、chunk 切分、hash 对比
-- [ ] 集成测试：完整同步流程（选 1 个静态文档站）
+- [x] 单元测试：URL scope 过滤、chunk 切分、hash 对比、SPA 检测、导航、站点元信息、discovery 缓存
+- [x] 集成测试：完整同步流程（`runner-e2e.test.ts`）
 - [ ] MCP 手动测试（Cursor 接入）
 - [ ] electron-builder 三平台打包
 - [ ] README 安装与 Cursor 配置说明

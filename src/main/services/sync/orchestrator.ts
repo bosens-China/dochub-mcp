@@ -11,6 +11,7 @@ import {
   type FetchOptions
 } from '../crawler/fetcher'
 import { extractLinksFromHtml } from '../discovery/index'
+import { extractNavigationFromHtml, type DiscoveredNavigationItem } from '../discovery/navigation'
 import { htmlToMd, wrapDocumentMarkdown } from '../converter/html-to-md'
 import { appendSyncLog, saveCheckpoint } from '../sync/persistence'
 import { contentHash, urlToDocPath, isInScope, matchesExclude } from '../source/util'
@@ -22,11 +23,12 @@ export interface CrawlContext {
   sourceId: string
   config: AppConfig
   record: SourceRecord
-  crawl: AppConfig['crawl']
+  crawl: AppConfig['crawl'] & { maxPages?: number | null }
   fetchOpts: FetchOptions
   robotsTxt: string | null
   checkpoint: Checkpoint
   onProgress: (progress: SyncProgress) => void
+  shouldPause?: () => boolean
 }
 
 async function writeDocFile(
@@ -45,12 +47,15 @@ export async function runConcurrentCrawl(ctx: CrawlContext): Promise<{
   completed: Checkpoint['completed']
   failed: Checkpoint['failed']
   domainFailureCount: number
+  navigation: Checkpoint['navigation']
   status: SourceRecord['sync']['status']
 }> {
   const { config, record, crawl, checkpoint } = ctx
   const queue: string[] = [...checkpoint.pending]
   const completed = { ...checkpoint.completed }
   const failed = { ...checkpoint.failed }
+  const navigation = [...checkpoint.navigation]
+  const navigationUrls = new Set(navigation.map((item) => item.url))
   let domainFailures = checkpoint.domainFailureCount
   const inFlight = new Map<string, Promise<void>>()
   const exclude = record.crawl.excludePatterns ?? []
@@ -87,10 +92,31 @@ export async function runConcurrentCrawl(ctx: CrawlContext): Promise<{
         pending: queue.filter((u) => !completed[u] && !inFlight.has(u)),
         completed,
         failed,
-        domainFailureCount: domainFailures
+        domainFailureCount: domainFailures,
+        navigation,
+        status: ctx.shouldPause?.() ? 'paused' : 'running'
       },
       config
     )
+  }
+
+  const mergeNavigation = (items: DiscoveredNavigationItem[]): void => {
+    if (items.length === 0) return
+
+    const maxOrder = navigation.reduce((max, item) => Math.max(max, item.order), -1)
+    const useExtractedOrder = navigation.length === 0
+    let appended = 0
+
+    for (const item of items.sort((a, b) => a.order - b.order)) {
+      if (navigationUrls.has(item.url)) continue
+
+      navigationUrls.add(item.url)
+      navigation.push({
+        ...item,
+        order: useExtractedOrder ? item.order : maxOrder + appended + 1
+      })
+      appended += 1
+    }
   }
 
   const processUrl = async (url: string): Promise<void> => {
@@ -119,6 +145,9 @@ export async function runConcurrentCrawl(ctx: CrawlContext): Promise<{
         const mdBody = htmlToMd({ html: result.body, url: result.finalUrl, title })
         const hash = contentHash(mdBody)
         const prev = completed[result.finalUrl]
+        mergeNavigation(
+          extractNavigationFromHtml(result.body, result.finalUrl, record.scope.prefix)
+        )
 
         if (prev?.hash === hash) {
           // 内容未变化：保留 completed 记录（断点续爬需要），仅记日志
@@ -204,8 +233,18 @@ export async function runConcurrentCrawl(ctx: CrawlContext): Promise<{
     while (
       inFlight.size < crawl.concurrency &&
       queue.length > 0 &&
-      domainFailures < crawl.domainFailureThreshold
+      domainFailures < crawl.domainFailureThreshold &&
+      !ctx.shouldPause?.()
     ) {
+      if (
+        crawl.maxPages !== null &&
+        crawl.maxPages !== undefined &&
+        Object.keys(completed).length + inFlight.size >= crawl.maxPages
+      ) {
+        queue.length = 0 // 达到最大页数，清空队列停止调度
+        break
+      }
+
       const url = queue.shift()
       if (!url || completed[url] || inFlight.has(url)) continue
       if (matchesExclude(url, exclude)) continue
@@ -221,6 +260,7 @@ export async function runConcurrentCrawl(ctx: CrawlContext): Promise<{
   schedule()
 
   while (inFlight.size > 0 || (queue.length > 0 && domainFailures < crawl.domainFailureThreshold)) {
+    if (ctx.shouldPause?.()) break
     if (inFlight.size === 0 && queue.length > 0) schedule()
     if (inFlight.size === 0 && queue.length === 0) break
     await sleep(100)
@@ -229,7 +269,19 @@ export async function runConcurrentCrawl(ctx: CrawlContext): Promise<{
   await Promise.all(inFlight.values())
 
   let status: SourceRecord['sync']['status'] = 'completed'
-  if (domainFailures >= crawl.domainFailureThreshold) {
+  if (ctx.shouldPause?.()) {
+    status = 'paused'
+    await persistCheckpoint()
+    await appendSyncLog(
+      {
+        ts: new Date().toISOString(),
+        sourceId: ctx.sourceId,
+        action: 'pause',
+        reason: 'user_paused'
+      },
+      config
+    )
+  } else if (domainFailures >= crawl.domainFailureThreshold) {
     status = 'domain_halted'
     await appendSyncLog(
       {
@@ -242,5 +294,5 @@ export async function runConcurrentCrawl(ctx: CrawlContext): Promise<{
     )
   }
 
-  return { completed, failed, domainFailureCount: domainFailures, status }
+  return { completed, failed, domainFailureCount: domainFailures, navigation, status }
 }

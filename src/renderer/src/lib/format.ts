@@ -45,3 +45,60 @@ export function truncateUrl(url: string, max = 48): string {
   if (url.length <= max) return url
   return `${url.slice(0, max - 1)}…`
 }
+
+export function generateSourceName(url: string): string {
+  try {
+    const parsed = new URL(url)
+    let name = parsed.hostname
+    const path = parsed.pathname.replace(/\/$/, '')
+    if (path) {
+      name += path
+    }
+    return name
+  } catch {
+    return url
+  }
+}
+
+export function calculateMaxDepth(seedUrl: string): number {
+  try {
+    const url = new URL(seedUrl)
+    let pathname = url.pathname
+    if (pathname === '/') return 0
+    if (pathname.endsWith('/')) pathname = pathname.slice(0, -1)
+    const parts = pathname.split('/').filter(Boolean)
+    return parts.length
+  } catch {
+    return 0
+  }
+}
+
+export function getPrefixByDepth(seedUrl: string, depth: number): string {
+  try {
+    const url = new URL(seedUrl)
+    let pathname = url.pathname
+    if (pathname === '/') return '/'
+
+    if (pathname.endsWith('/')) pathname = pathname.slice(0, -1)
+
+    const parts = pathname.split('/').filter(Boolean)
+    const keepCount = Math.max(0, parts.length - depth)
+    const keptParts = parts.slice(0, keepCount)
+
+    if (keptParts.length === 0) return '/'
+    return '/' + keptParts.join('/') + '/'
+  } catch {
+    return '/'
+  }
+}
+
+export function getDepthByPrefix(seedUrl: string, pathPrefix: string): number {
+  try {
+    const url = new URL(seedUrl)
+    const urlParts = url.pathname.split('/').filter(Boolean)
+    const prefixParts = pathPrefix.split('/').filter(Boolean)
+    return Math.max(0, urlParts.length - prefixParts.length)
+  } catch {
+    return 0
+  }
+}

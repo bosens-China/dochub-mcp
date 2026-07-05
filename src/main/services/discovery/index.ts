@@ -2,6 +2,28 @@ import { load } from 'cheerio'
 import picomatch from 'picomatch'
 import type { CrawlConfig } from '@shared/types/config'
 import { isInScope } from '../source/util'
+import { cachedText } from './domain-cache'
+
+/** Fetch a URL's text (or null on non-2xx / error). Never throws. */
+async function fetchTextOrNull(
+  url: string,
+  crawl: CrawlConfig,
+  customHeaders: Record<string, string>
+): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': crawl.userAgent,
+        ...crawl.defaultHeaders,
+        ...customHeaders
+      },
+      signal: AbortSignal.timeout(crawl.requestTimeoutMs)
+    })
+    return res.ok ? await res.text() : null
+  } catch {
+    return null
+  }
+}
 
 export function normalizeUrl(href: string, base: string): string | null {
   try {
@@ -94,55 +116,35 @@ export async function discoverSeedUrls(
   const llmsPaths = ['/llms-full.txt', '/llms.txt']
   for (const path of llmsPaths) {
     onProgress?.(`正在查找 ${path}…`)
-    try {
-      const res = await fetch(`${domain}${path}`, {
-        headers: {
-          'User-Agent': crawl.userAgent,
-          ...crawl.defaultHeaders,
-          ...customHeaders
-        },
-        signal: AbortSignal.timeout(crawl.requestTimeoutMs)
-      })
-      if (res.ok) {
-        const text = await res.text()
-        const found = parseLlmsTxt(text, scopePrefix)
-        for (const u of found) candidates.add(u)
-        if (found.length > 0) {
-          onProgress?.(`从 ${path} 发现 ${found.length} 个 URL`)
-        } else {
-          onProgress?.(`${path} 中无符合范围的 URL`)
-        }
-        break
+    const text = await cachedText(`${domain}${path}`, () =>
+      fetchTextOrNull(`${domain}${path}`, crawl, customHeaders)
+    )
+    if (text !== null) {
+      const found = parseLlmsTxt(text, scopePrefix)
+      for (const u of found) candidates.add(u)
+      if (found.length > 0) {
+        onProgress?.(`从 ${path} 发现 ${found.length} 个 URL`)
+      } else {
+        onProgress?.(`${path} 中无符合范围的 URL`)
       }
-    } catch {
-      /* skip */
+      break
     }
   }
 
   onProgress?.('正在读取 sitemap.xml…')
-  try {
-    const res = await fetch(`${domain}/sitemap.xml`, {
-      headers: {
-        'User-Agent': crawl.userAgent,
-        ...crawl.defaultHeaders,
-        ...customHeaders
-      },
-      signal: AbortSignal.timeout(crawl.requestTimeoutMs)
-    })
-    if (res.ok) {
-      const xml = await res.text()
-      const found = parseSitemapXml(xml, scopePrefix)
-      for (const u of found) candidates.add(u)
-      if (found.length > 0) {
-        onProgress?.(`从 sitemap 发现 ${found.length} 个 URL`)
-      } else {
-        onProgress?.('sitemap 中无符合范围的 URL')
-      }
+  const sitemapXml = await cachedText(`${domain}/sitemap.xml`, () =>
+    fetchTextOrNull(`${domain}/sitemap.xml`, crawl, customHeaders)
+  )
+  if (sitemapXml !== null) {
+    const found = parseSitemapXml(sitemapXml, scopePrefix)
+    for (const u of found) candidates.add(u)
+    if (found.length > 0) {
+      onProgress?.(`从 sitemap 发现 ${found.length} 个 URL`)
     } else {
-      onProgress?.('未找到 sitemap.xml，将从起始页链接发现')
+      onProgress?.('sitemap 中无符合范围的 URL')
     }
-  } catch {
-    onProgress?.('读取 sitemap 失败，将从起始页链接发现')
+  } else {
+    onProgress?.('未找到 sitemap.xml，将从起始页链接发现')
   }
 
   const urls = filterUrls([...candidates], scopePrefix)

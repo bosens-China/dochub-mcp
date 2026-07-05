@@ -8,7 +8,9 @@ import {
   SYSTEM_DOC_KEY
 } from '@renderer/lib/sync-log'
 
-function entry(partial: Partial<SyncLogEntry> & Pick<SyncLogEntry, 'id' | 'sourceId'>): SyncLogEntry {
+function entry(
+  partial: Partial<SyncLogEntry> & Pick<SyncLogEntry, 'id' | 'sourceId'>
+): SyncLogEntry {
   return {
     sourceName: partial.sourceName ?? partial.sourceId,
     action: partial.action ?? 'fetch',
@@ -39,7 +41,12 @@ describe('sync-log', () => {
 
   it('groups logs by document path', () => {
     const logs = [
-      entry({ id: '1', sourceId: 'a', path: 'docs/guide/a.md', timestamp: '2026-01-02T00:00:00.000Z' }),
+      entry({
+        id: '1',
+        sourceId: 'a',
+        path: 'docs/guide/a.md',
+        timestamp: '2026-01-02T00:00:00.000Z'
+      }),
       entry({ id: '2', sourceId: 'a', path: 'docs/guide/b.md' }),
       entry({ id: '3', sourceId: 'a', action: 'domain_halt' })
     ]

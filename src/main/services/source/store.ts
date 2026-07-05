@@ -52,7 +52,7 @@ export async function createAndWriteSourceRecord(
   const now = new Date().toISOString()
   const url = new URL(seedUrl)
   const id = slugFromUrl(seedUrl)
-  const prefix = pathPrefixFromSeed(seedUrl)
+  const prefix = input.pathPrefix || pathPrefixFromSeed(seedUrl)
 
   // ID 冲突检测
   const existing = await readSourceRecord(id, config)
@@ -69,7 +69,8 @@ export async function createAndWriteSourceRecord(
     crawl: {
       mode: input.crawlMode,
       customHeaders: {},
-      excludePatterns: []
+      excludePatterns: [],
+      maxPages: input.maxPages ?? null
     },
     sync: {
       status: 'idle',
@@ -91,7 +92,7 @@ export function createSourceRecord(input: AddSourceInput): SourceRecord {
   const now = new Date().toISOString()
   const url = new URL(seedUrl)
   const id = slugFromUrl(seedUrl)
-  const prefix = pathPrefixFromSeed(seedUrl)
+  const prefix = input.pathPrefix || pathPrefixFromSeed(seedUrl)
 
   return SourceRecordSchema.parse({
     id,
@@ -102,7 +103,8 @@ export function createSourceRecord(input: AddSourceInput): SourceRecord {
     crawl: {
       mode: input.crawlMode,
       customHeaders: {},
-      excludePatterns: []
+      excludePatterns: [],
+      maxPages: input.maxPages ?? null
     },
     sync: {
       status: 'idle',
@@ -130,9 +132,11 @@ export async function updateSourceRecord(
     ...existing,
     name: input.name?.trim() ?? existing.name,
     seedUrl,
-    scope: input.seedUrl
-      ? { type: 'path_prefix', prefix: pathPrefixFromSeed(seedUrl) }
-      : existing.scope,
+    scope: input.pathPrefix
+      ? { type: 'path_prefix', prefix: input.pathPrefix }
+      : input.seedUrl
+        ? { type: 'path_prefix', prefix: pathPrefixFromSeed(seedUrl) }
+        : existing.scope,
     discovery: input.seedUrl ? { domain: new URL(seedUrl).origin } : existing.discovery,
     crawl: {
       ...existing.crawl,
@@ -141,7 +145,8 @@ export async function updateSourceRecord(
       excludePatterns: input.excludePatterns ?? existing.crawl.excludePatterns,
       respectRobots: input.respectRobots ?? existing.crawl.respectRobots,
       concurrency: input.concurrency ?? existing.crawl.concurrency,
-      maxRetriesPerUrl: input.maxRetriesPerUrl ?? existing.crawl.maxRetriesPerUrl
+      maxRetriesPerUrl: input.maxRetriesPerUrl ?? existing.crawl.maxRetriesPerUrl,
+      maxPages: input.maxPages !== undefined ? input.maxPages : existing.crawl.maxPages
     },
     updatedAt: new Date().toISOString()
   })

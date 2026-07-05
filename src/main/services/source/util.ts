@@ -27,7 +27,8 @@ export function toDocSource(record: SourceRecord): DocSource {
     pageCount: record.sync.pageCount,
     failedCount: record.sync.failedUrlCount,
     crawlMode: record.crawl.mode,
-    spineColor: spineColorForId(record.id)
+    spineColor: spineColorForId(record.id),
+    needsSpa: record.sync.needsSpa
   }
 }
 
@@ -38,7 +39,11 @@ export function toSourceDetail(record: SourceRecord): SourceDetail {
     excludePatterns: record.crawl.excludePatterns,
     respectRobots: record.crawl.respectRobots ?? true,
     concurrency: record.crawl.concurrency,
-    maxRetriesPerUrl: record.crawl.maxRetriesPerUrl
+    maxRetriesPerUrl: record.crawl.maxRetriesPerUrl,
+    maxPages: record.crawl.maxPages,
+    siteTitle: record.discovery.siteTitle,
+    siteCharset: record.discovery.charset,
+    siteLang: record.discovery.lang
   }
 }
 

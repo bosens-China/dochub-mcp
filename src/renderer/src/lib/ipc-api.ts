@@ -1,10 +1,12 @@
 import type { DocHubAPI } from '@shared/ipc/api-types'
 import type {
   AddSourceInput,
+  AppLogEntry,
   AppSettings,
   DocContent,
   DocSource,
   DocTreeNode,
+  McpStatus,
   SearchResult,
   SourceDetail,
   SpaDetectionResult,
@@ -48,6 +50,10 @@ export function triggerSync(sourceId: string): Promise<void> {
   return getApi().triggerSync(sourceId)
 }
 
+export function pauseSync(sourceId: string): Promise<void> {
+  return getApi().pauseSync(sourceId)
+}
+
 export function fetchDocTree(sourceId: string): Promise<DocTreeNode[]> {
   return getApi().getDocTree(sourceId)
 }
@@ -62,6 +68,14 @@ export function fetchSyncProgress(): Promise<SyncProgress[]> {
 
 export function fetchSyncLogs(): Promise<SyncLogEntry[]> {
   return getApi().getSyncLogs()
+}
+
+export function fetchAppLogs(): Promise<AppLogEntry[]> {
+  return getApi().getAppLogs()
+}
+
+export function fetchMcpStatus(): Promise<McpStatus> {
+  return getApi().getMcpStatus()
 }
 
 export function fetchSettings(): Promise<AppSettings> {

@@ -1,10 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Badge, Empty, Tabs, Timeline } from 'antd'
-import {
-  CloseCircleOutlined,
-  InfoCircleOutlined,
-  WarningOutlined
-} from '@ant-design/icons'
+import { CloseCircleOutlined, InfoCircleOutlined, WarningOutlined } from '@ant-design/icons'
 import type { DocSource, SyncLogEntry, SyncLogLevel } from '@shared/types'
 import { formatDateTime } from '@renderer/lib/format'
 import {
@@ -29,11 +25,7 @@ function LogTimeline({
 }): React.JSX.Element {
   if (logs.length === 0) {
     return (
-      <Empty
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="该分类下暂无记录"
-        className="my-8"
-      />
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该分类下暂无记录" className="my-8" />
     )
   }
 
@@ -121,10 +113,7 @@ export function SyncLogTabs({ logs, sources, isLoading }: SyncLogTabsProps): Rea
   const logsBySource = useMemo(() => groupLogsBySource(logs), [logs])
 
   const sourceTabItems = useMemo(() => {
-    const sourceIds = new Set<string>([
-      ...sources.map((s) => s.id),
-      ...logs.map((l) => l.sourceId)
-    ])
+    const sourceIds = new Set<string>([...sources.map((s) => s.id), ...logs.map((l) => l.sourceId)])
 
     return [...sourceIds]
       .map((sourceId) => {

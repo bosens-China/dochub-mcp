@@ -6,6 +6,7 @@ import {
   SearchOutlined,
   SettingOutlined
 } from '@ant-design/icons'
+import { useSyncProgress } from '@renderer/hooks/use-app-data'
 
 const NAV_ITEMS = [
   { to: '/sources', label: '文档源', icon: DatabaseOutlined, spine: '#0f766e' },
@@ -17,6 +18,8 @@ const NAV_ITEMS = [
 
 export function NavSpine(): React.JSX.Element {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const { data: progressList = [] } = useSyncProgress()
+  const isSyncing = progressList.length > 0
 
   return (
     <nav className="flex flex-col gap-1 px-3 py-6" aria-label="主导航">
@@ -46,8 +49,11 @@ export function NavSpine(): React.JSX.Element {
               style={{ backgroundColor: item.spine, opacity: active ? 1 : 0.45 }}
               aria-hidden
             />
-            <Icon className="text-base" />
-            <span className="font-body text-sm font-medium">{item.label}</span>
+            <Icon className="text-base" spin={item.to === '/sync' && isSyncing} />
+            <span className="font-body text-sm font-medium flex-1">{item.label}</span>
+            {item.to === '/sync' && isSyncing && (
+              <span className="w-2 h-2 rounded-full bg-archive-teal animate-pulse" />
+            )}
           </Link>
         )
       })}

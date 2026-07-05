@@ -1,6 +1,9 @@
 import { fetch as undiciFetch } from 'undici'
 import robotsParser from 'robots-parser'
 import type { CrawlConfig } from '@shared/types/config'
+import type { CrawlMode } from '@shared/types'
+import { fetchSpaHtml } from './spa-fetcher'
+import { cachedText } from '../discovery/domain-cache'
 
 export interface FetchResult {
   url: string
@@ -14,6 +17,7 @@ export interface FetchOptions {
   crawl: CrawlConfig
   customHeaders?: Record<string, string>
   robotsTxt?: string | null
+  crawlMode?: CrawlMode
 }
 
 function headerRecord(headers: {
@@ -27,13 +31,21 @@ function headerRecord(headers: {
 }
 
 export async function fetchUrl(url: string, options: FetchOptions): Promise<FetchResult> {
-  const { crawl, customHeaders = {}, robotsTxt = null } = options
+  const { crawl, customHeaders = {}, robotsTxt = null, crawlMode } = options
 
   if (crawl.respectRobots && robotsTxt) {
     const robots = robotsParser(url, robotsTxt)
     if (!robots.isAllowed(url, crawl.userAgent)) {
       throw new Error(`robots.txt 禁止访问: ${url}`)
     }
+  }
+
+  if (crawlMode === 'spa') {
+    const headers = { ...crawl.defaultHeaders, ...customHeaders }
+    const userAgent =
+      Object.entries(headers).find(([key]) => key.toLowerCase() === 'user-agent')?.[1] ??
+      crawl.userAgent
+    return fetchSpaHtml(url, crawl.requestTimeoutMs, userAgent, headers)
   }
 
   const controller = new AbortController()
@@ -66,16 +78,18 @@ export async function fetchUrl(url: string, options: FetchOptions): Promise<Fetc
 }
 
 export async function fetchRobotsTxt(origin: string, crawl: CrawlConfig): Promise<string | null> {
-  try {
-    const res = await undiciFetch(`${origin}/robots.txt`, {
-      headers: { 'User-Agent': crawl.userAgent },
-      signal: AbortSignal.timeout(crawl.requestTimeoutMs)
-    })
-    if (res.ok) return await res.text()
-  } catch {
-    /* no robots */
-  }
-  return null
+  return cachedText(`${origin}/robots.txt`, async () => {
+    try {
+      const res = await undiciFetch(`${origin}/robots.txt`, {
+        headers: { 'User-Agent': crawl.userAgent },
+        signal: AbortSignal.timeout(crawl.requestTimeoutMs)
+      })
+      if (res.ok) return await res.text()
+    } catch {
+      /* no robots */
+    }
+    return null
+  })
 }
 
 export function robotsCrawlDelay(robotsTxt: string | null, url: string, ua: string): number | null {

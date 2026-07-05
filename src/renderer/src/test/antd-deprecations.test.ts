@@ -16,7 +16,10 @@ const DEPRECATED_PATTERNS: Array<{ pattern: RegExp; hint: string }> = [
   { pattern: /\bAlert[^>]*\bmessage=/, hint: 'Alert: message → title' },
   { pattern: /\bbodyStyle=\{/, hint: 'Modal: bodyStyle → styles.body' },
   { pattern: /\bmaskStyle=\{/, hint: 'Modal: maskStyle → styles.mask' },
-  { pattern: /\boverlayClassName=/, hint: 'Select/Tooltip: overlayClassName → classNames.popup/root' },
+  {
+    pattern: /\boverlayClassName=/,
+    hint: 'Select/Tooltip: overlayClassName → classNames.popup/root'
+  },
   { pattern: /\bpopupClassName=/, hint: 'Select: popupClassName → classNames.popup.root' },
   { pattern: /\bdropdownClassName=/, hint: 'Select: dropdownClassName → classNames popup' },
   { pattern: /\btabPosition=/, hint: 'Tabs: tabPosition → tabPlacement' },
@@ -54,10 +57,7 @@ function scanTimelineItems(content: string, rel: string): string[] {
   return hits
 }
 
-function scanFile(
-  filePath: string,
-  patterns: Array<{ pattern: RegExp; hint: string }>
-): string[] {
+function scanFile(filePath: string, patterns: Array<{ pattern: RegExp; hint: string }>): string[] {
   const content = readFileSync(filePath, 'utf8')
   const rel = relative(RENDERER_ROOT, filePath)
   const hits: string[] = []

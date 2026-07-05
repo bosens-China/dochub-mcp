@@ -6,13 +6,15 @@ const ACTION_LABEL: Record<SyncLogAction, string> = {
   skip: '跳过',
   delete: '删除',
   fail: '失败',
-  domain_halt: '域名熔断'
+  domain_halt: '域名熔断',
+  pause: '暂停'
 }
 
 const REASON_LABEL: Record<string, string> = {
   content_unchanged: '内容未变化',
   removed_from_site: '远端已移除',
-  domain_failure_threshold: '失败 URL 达到阈值'
+  domain_failure_threshold: '失败 URL 达到阈值',
+  user_paused: '用户暂停'
 }
 
 export const SYSTEM_DOC_KEY = '__system__'
@@ -21,11 +23,13 @@ export const MAX_DOC_TABS = 24
 
 export function syncLogLevel(entry: Pick<SyncLogEntry, 'action'>): SyncLogLevel {
   if (entry.action === 'fail' || entry.action === 'domain_halt') return 'error'
-  if (entry.action === 'delete') return 'warn'
+  if (entry.action === 'delete' || entry.action === 'pause') return 'warn'
   return 'info'
 }
 
-export function formatSyncLogMessage(entry: Pick<SyncLogEntry, 'action' | 'reason' | 'url'>): string {
+export function formatSyncLogMessage(
+  entry: Pick<SyncLogEntry, 'action' | 'reason' | 'url'>
+): string {
   const label = ACTION_LABEL[entry.action]
   if (entry.reason) {
     const reasonText = REASON_LABEL[entry.reason] ?? entry.reason
@@ -75,7 +79,10 @@ export function groupLogsByDocument(logs: SyncLogEntry[]): DocLogGroup[] {
     key,
     label: docGroupLabel(key),
     logs: items.sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
-    latestTs: items.reduce((max, item) => (item.timestamp > max ? item.timestamp : max), items[0]?.timestamp ?? '')
+    latestTs: items.reduce(
+      (max, item) => (item.timestamp > max ? item.timestamp : max),
+      items[0]?.timestamp ?? ''
+    )
   }))
 
   groups.sort((a, b) => {
@@ -97,7 +104,9 @@ export function groupLogsByDocument(logs: SyncLogEntry[]): DocLogGroup[] {
     return system ? [...visible, system] : visible
   }
 
-  const otherLogs = hidden.flatMap((g) => g.logs).sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+  const otherLogs = hidden
+    .flatMap((g) => g.logs)
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
   const otherGroup: DocLogGroup = {
     key: OTHER_DOC_KEY,
     label: docGroupLabel(OTHER_DOC_KEY),

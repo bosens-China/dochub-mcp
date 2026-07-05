@@ -43,3 +43,7 @@ export function getCheckpointPath(sourceId: string, config: AppConfig = DEFAULT_
 export function getSyncLogPath(config: AppConfig = DEFAULT_CONFIG): string {
   return join(getDataDir(config), 'sync.log.jsonl')
 }
+
+export function getAppLogPath(config: AppConfig = DEFAULT_CONFIG): string {
+  return join(getDataDir(config), 'app.log.jsonl')
+}

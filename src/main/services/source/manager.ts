@@ -1,7 +1,10 @@
 import type { AppConfig } from '@shared/types/config'
+import { shell } from 'electron'
+import { isAbsolute, relative, resolve } from 'path'
 import type {
   AddSourceInput,
   AppSettings,
+  CrawlMode,
   DocContent,
   DocSource,
   DocTreeNode,
@@ -19,19 +22,25 @@ import {
   deleteSourceRecord,
   listSourceRecords,
   readSourceRecord,
+  sourceDocsDir,
   updateSourceRecord
 } from '../source/store'
 import {
   getAllActiveSyncProgress,
   getSyncProgress,
   listDocTree,
+  listNavigationDocTree,
+  requestSourceSyncPause,
   readDocContent,
   runSourceSync
 } from '../sync/runner'
 import { readSyncLogs } from '../sync/persistence'
 import { detectSpa as runSpaDetect } from '../discovery/spa-detect'
+import { fetchUrl } from '../crawler/fetcher'
+import { htmlToMd } from '../converter/html-to-md'
 import { searchKeyword } from '../indexer/fts'
 import { mcpHealthUrl } from '@shared/constants/mcp'
+import { logger } from '../logger/app-logger'
 
 function buildTree(nodes: Array<{ key: string; title: string; isLeaf?: boolean }>): DocTreeNode[] {
   const root: DocTreeNode[] = []
@@ -95,7 +104,7 @@ function toSyncLogEntries(
     level:
       line.action === 'fail' || line.action === 'domain_halt'
         ? 'error'
-        : line.action === 'delete'
+        : line.action === 'delete' || line.action === 'pause'
           ? 'warn'
           : 'info',
     message:
@@ -106,7 +115,9 @@ function toSyncLogEntries(
           ? '删除：远端已移除'
           : line.reason === 'domain_failure_threshold'
             ? '域名熔断：失败 URL 达到阈值'
-            : (line.reason ?? line.action)),
+            : line.reason === 'user_paused'
+              ? '同步已暂停'
+              : (line.reason ?? line.action)),
     timestamp: line.ts,
     url: line.url,
     path: line.path,
@@ -168,6 +179,15 @@ export class SourceManager {
     }
   }
 
+  async previewCrawl(url: string, mode: CrawlMode): Promise<string> {
+    const config = this.cfg()
+    const result = await fetchUrl(url, {
+      crawl: config.crawl,
+      crawlMode: mode
+    })
+    return htmlToMd({ html: result.body, url: result.finalUrl, title: url })
+  }
+
   async deleteSource(id: string): Promise<void> {
     await deleteSourceRecord(id, this.cfg())
   }
@@ -175,17 +195,41 @@ export class SourceManager {
   triggerSync(sourceId: string): void {
     const config = this.cfg()
     void runSourceSync(sourceId, config).catch((err) => {
-      console.error('[sync]', sourceId, err)
+      logger.error('sync', `同步失败: ${sourceId}`, {
+        error: err instanceof Error ? err.message : String(err)
+      })
     })
   }
 
+  async pauseSync(sourceId: string): Promise<void> {
+    await requestSourceSyncPause(sourceId, this.cfg())
+  }
+
   async getDocTree(sourceId: string): Promise<DocTreeNode[]> {
+    const navigationTree = await listNavigationDocTree(sourceId, this.cfg())
+    if (navigationTree) return navigationTree
+
     const nodes = await listDocTree(sourceId, this.cfg())
     return buildTree(nodes)
   }
 
   async readDocument(sourceId: string, path: string): Promise<DocContent> {
     return readDocContent(sourceId, path, this.cfg())
+  }
+
+  async openFolder(sourceId: string, path: string): Promise<void> {
+    if (!path.startsWith('docs/') || !path.endsWith('.md')) {
+      throw new Error('无效的文件路径')
+    }
+    const config = this.cfg()
+    const relativePath = path.replace(/^docs\//, '')
+    const docsRoot = resolve(sourceDocsDir(sourceId, config))
+    const fullPath = resolve(docsRoot, relativePath)
+    const relToRoot = relative(docsRoot, fullPath)
+    if (relToRoot.startsWith('..') || isAbsolute(relToRoot)) {
+      throw new Error('无效的文件路径')
+    }
+    shell.showItemInFolder(fullPath)
   }
 
   getSyncProgress(sourceId?: string): SyncProgress | SyncProgress[] | null {

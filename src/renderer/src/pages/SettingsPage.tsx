@@ -1,9 +1,26 @@
 import { useEffect } from 'react'
-import { Alert, Button, Form, Input, InputNumber, Select, Switch, Tabs, App } from 'antd'
+import {
+  Alert,
+  Button,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  Switch,
+  Tabs,
+  Tag,
+  Typography,
+  App
+} from 'antd'
 import { ApiOutlined, CloudDownloadOutlined, DesktopOutlined } from '@ant-design/icons'
 import { MCP_DEFAULT_PORT } from '@shared/constants/mcp'
 import type { AppSettings } from '@shared/types'
-import { useSettings, useTestMcpConnection, useUpdateSettings } from '@renderer/hooks/use-app-data'
+import {
+  useMcpStatus,
+  useSettings,
+  useTestMcpConnection,
+  useUpdateSettings
+} from '@renderer/hooks/use-app-data'
 
 function GeneralTab({
   settings,
@@ -58,6 +75,7 @@ function McpTab({
     autoStart: boolean
   }>()
   const testMutation = useTestMcpConnection()
+  const { data: status } = useMcpStatus()
 
   useEffect(() => {
     form.setFieldsValue(settings.mcp)
@@ -79,10 +97,26 @@ function McpTab({
         type="info"
         showIcon
         icon={<ApiOutlined />}
-        className="mb-6"
+        className="mb-4"
         title="MCP 供 Cursor 等 AI 编辑器读取本地文档"
         description="关闭后不影响本地爬取与浏览，仅外部 Host 无法连接。"
       />
+      <div className="mb-6 flex items-center gap-3">
+        <span className="text-archive-muted">服务状态：</span>
+        {status?.listening ? (
+          <Tag color="green">运行中</Tag>
+        ) : status?.enabled ? (
+          <Tag color="red">未监听</Tag>
+        ) : (
+          <Tag>已关闭</Tag>
+        )}
+        {status?.listening && (
+          <Typography.Text copyable code className="text-xs">
+            {status.endpoint}
+          </Typography.Text>
+        )}
+        {status?.error && <span className="text-red-500 text-xs">{status.error}</span>}
+      </div>
       <Form form={form} layout="vertical" onFinish={(values) => onSave({ mcp: values })}>
         <Form.Item name="enabled" label="启用 MCP 服务" valuePropName="checked">
           <Switch />

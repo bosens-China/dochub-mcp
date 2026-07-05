@@ -2,6 +2,7 @@ import { htmlToMarkdown } from '@mdream/js'
 import { withMinimalPreset } from '@mdream/js/preset/minimal'
 import TurndownService from 'turndown'
 import { gfm } from '@joplin/turndown-plugin-gfm'
+import { load } from 'cheerio'
 
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' })
 turndown.use(gfm)
@@ -12,16 +13,47 @@ export interface ConvertOptions {
   title?: string
 }
 
+const NON_CONTENT_SELECTORS = [
+  '[data-agent-docs-index]',
+  '[aria-hidden="true"]',
+  '[hidden]',
+  '.sr-only',
+  '.skip-to-content',
+  'script',
+  'style',
+  'noscript',
+  'nav',
+  'footer',
+  'header'
+]
+
+function readableHtml(html: string): string {
+  const $ = load(html)
+  $(NON_CONTENT_SELECTORS.join(',')).remove()
+
+  const candidates = ['main', 'article', '[role="main"]', '.mdx-content', '.prose']
+  for (const selector of candidates) {
+    const node = $(selector).first()
+    const text = node.text().replace(/\s+/g, ' ').trim()
+    if (text.length > 200) {
+      return $.html(node)
+    }
+  }
+
+  return $.html()
+}
+
 export function htmlToMd(options: ConvertOptions): string {
   const { html, url, title } = options
+  const contentHtml = readableHtml(html)
   try {
     const md = htmlToMarkdown(
-      html,
+      contentHtml,
       withMinimalPreset({
         origin: url,
         plugins: {
           frontmatter: false,
-          filter: { exclude: ['nav', 'footer', 'header', '.sidebar'] }
+          filter: { exclude: ['nav', 'footer', 'header', '.sidebar', '[data-agent-docs-index]'] }
         }
       })
     )
@@ -30,7 +62,7 @@ export function htmlToMd(options: ConvertOptions): string {
     /* fallback */
   }
 
-  const fallback = turndown.turndown(html)
+  const fallback = turndown.turndown(contentHtml)
   const heading = title ? `# ${title}\n\n` : ''
   return `${heading}${fallback}`.trim()
 }

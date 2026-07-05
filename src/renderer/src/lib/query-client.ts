@@ -16,6 +16,8 @@ export const queryKeys = {
   docContent: (sourceId: string, path: string) => ['docContent', sourceId, path] as const,
   syncProgress: ['syncProgress'] as const,
   syncLogs: ['syncLogs'] as const,
+  appLogs: ['appLogs'] as const,
+  mcpStatus: ['mcpStatus'] as const,
   settings: ['settings'] as const,
   searchResults: (query: string, sourceId: string | null) => ['search', query, sourceId] as const
 }

@@ -20,7 +20,17 @@ export const CheckpointSchema = z.object({
       lastError: z.string()
     })
   ),
-  domainFailureCount: z.number().default(0)
+  domainFailureCount: z.number().default(0),
+  navigation: z
+    .array(
+      z.object({
+        url: z.string(),
+        title: z.string(),
+        groups: z.array(z.string()).default([]),
+        order: z.number()
+      })
+    )
+    .default([])
 })
 
 export type Checkpoint = z.infer<typeof CheckpointSchema>
@@ -28,7 +38,7 @@ export type Checkpoint = z.infer<typeof CheckpointSchema>
 export interface SyncLogLine {
   ts: string
   sourceId: string
-  action: 'fetch' | 'skip' | 'update' | 'delete' | 'fail' | 'domain_halt'
+  action: 'fetch' | 'skip' | 'update' | 'delete' | 'fail' | 'domain_halt' | 'pause'
   url?: string
   path?: string
   reason?: string

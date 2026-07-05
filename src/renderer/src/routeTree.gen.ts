@@ -19,32 +19,32 @@ import { Route as BrowseIndexRouteImport } from './routes/browse/index'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRouteImport
 } as any)
 const SyncIndexRoute = SyncIndexRouteImport.update({
   id: '/sync/',
   path: '/sync/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRouteImport
 } as any)
 const SourcesIndexRoute = SourcesIndexRouteImport.update({
   id: '/sources/',
   path: '/sources/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRouteImport
 } as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRouteImport
 } as any)
 const SearchIndexRoute = SearchIndexRouteImport.update({
   id: '/search/',
   path: '/search/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRouteImport
 } as any)
 const BrowseIndexRoute = BrowseIndexRouteImport.update({
   id: '/browse/',
   path: '/browse/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRouteImport
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -74,23 +74,10 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/browse/'
-    | '/search/'
-    | '/settings/'
-    | '/sources/'
-    | '/sync/'
+  fullPaths: '/' | '/browse/' | '/search/' | '/settings/' | '/sources/' | '/sync/'
   fileRoutesByTo: FileRoutesByTo
   to: '/' | '/browse' | '/search' | '/settings' | '/sources' | '/sync'
-  id:
-    | '__root__'
-    | '/'
-    | '/browse/'
-    | '/search/'
-    | '/settings/'
-    | '/sources/'
-    | '/sync/'
+  id: '__root__' | '/' | '/browse/' | '/search/' | '/settings/' | '/sources/' | '/sync/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -155,7 +142,7 @@ const rootRouteChildren: RootRouteChildren = {
   SearchIndexRoute: SearchIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
   SourcesIndexRoute: SourcesIndexRoute,
-  SyncIndexRoute: SyncIndexRoute,
+  SyncIndexRoute: SyncIndexRoute
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

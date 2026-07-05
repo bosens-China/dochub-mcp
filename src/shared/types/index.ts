@@ -29,3 +29,6 @@ export { CheckpointSchema } from './checkpoint'
 
 export type { SourceMeta, SourceMetaDocument } from './source-meta'
 export { SourceMetaSchema, SourceMetaDocumentSchema } from './source-meta'
+
+export type { McpStatus } from './mcp-status'
+export type { AppLogEntry, AppLogLevel } from './app-log'

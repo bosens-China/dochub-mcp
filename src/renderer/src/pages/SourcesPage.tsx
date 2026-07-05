@@ -1,182 +1,15 @@
 import { useState } from 'react'
-import {
-  DeleteOutlined,
-  EditOutlined,
-  PlusOutlined,
-  ReadOutlined,
-  SyncOutlined,
-  LinkOutlined
-} from '@ant-design/icons'
-import { Button, Empty, Modal, Form, Input, Select, Tag, Tooltip, App, Progress } from 'antd'
-import { useRouter } from '@tanstack/react-router'
-import type { CrawlMode, DocSource } from '@shared/types'
-import {
-  formatRelativeTime,
-  syncStatusColor,
-  syncStatusLabel,
-  truncateUrl
-} from '@renderer/lib/format'
-import {
-  useAddSource,
-  useDeleteSource,
-  useDetectSpa,
-  useSourceSyncProgress,
-  useSources,
-  useTriggerSync
-} from '@renderer/hooks/use-app-data'
+import { EyeOutlined, PlusOutlined } from '@ant-design/icons'
+import { App, Button, Empty, Form, Input, InputNumber, Modal, Select } from 'antd'
+import type { CrawlMode } from '@shared/types'
+import { generateSourceName } from '@renderer/lib/format'
+import { useAddSource, useDetectSpa, useSources } from '@renderer/hooks/use-app-data'
+import { ScopeDepthInput } from '@renderer/components/ScopeDepthInput'
 import { SourceEditModal } from '@renderer/components/SourceEditModal'
 import { SpaConfirmModal } from '@renderer/components/SpaConfirmModal'
-
-function SourceCard({
-  source,
-  onEdit
-}: {
-  source: DocSource
-  onEdit: (id: string) => void
-}): React.JSX.Element {
-  const { message, modal } = App.useApp()
-  const router = useRouter()
-  const syncMutation = useTriggerSync()
-  const deleteMutation = useDeleteSource()
-  const progress = useSourceSyncProgress(source.id)
-  const isSyncing = source.status === 'syncing' || progress !== null
-
-  const handleBrowse = (): void => {
-    void router.navigate({ to: '/browse', search: { sourceId: source.id, path: undefined } })
-  }
-
-  const handleDelete = (): void => {
-    modal.confirm({
-      title: '删除文档源',
-      content: `确定删除「${source.name}」？本地镜像文件将一并移除。`,
-      okText: '删除',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: () => deleteMutation.mutateAsync(source.id)
-    })
-  }
-
-  return (
-    <article className="archive-panel p-0 flex overflow-hidden hover:shadow-md transition-shadow">
-      <div
-        className="archive-spine w-2 self-stretch shrink-0"
-        style={{ backgroundColor: source.spineColor }}
-        aria-hidden
-      />
-      <div className="flex-1 p-4 min-w-0">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <button
-              type="button"
-              className="text-left w-full bg-transparent border-0 p-0 cursor-pointer group/title"
-              onClick={handleBrowse}
-              title="浏览文档"
-            >
-              <h3 className="font-display text-lg text-archive-ink m-0 font-semibold group-hover/title:text-archive-teal transition-colors">
-                {source.name}
-              </h3>
-            </button>
-            <p className="font-mono text-xs text-archive-muted mt-1 mb-0 truncate">
-              <LinkOutlined className="mr-1" />
-              {truncateUrl(source.seedUrl, 56)}
-            </p>
-          </div>
-          <Tag color={syncStatusColor(isSyncing ? 'syncing' : source.status)}>
-            {isSyncing ? '同步中' : syncStatusLabel(source.status)}
-          </Tag>
-        </div>
-
-        {progress && (
-          <div className="mt-3">
-            <Progress
-              percent={Math.round((progress.completed / Math.max(progress.total, 1)) * 100)}
-              size="small"
-              strokeColor="#0f766e"
-              format={() => `${progress.completed}/${progress.total}`}
-            />
-            <p className="text-xs text-archive-ink m-0 mt-1.5">{progress.message}</p>
-            {progress.currentUrl && (
-              <p className="font-mono text-xs text-archive-muted m-0 mt-0.5 truncate">
-                {progress.currentUrl}
-              </p>
-            )}
-            {progress.failed > 0 && (
-              <p className="text-xs text-archive-danger m-0 mt-0.5">{progress.failed} 个 URL 失败</p>
-            )}
-          </div>
-        )}
-
-        <dl className="grid grid-cols-3 gap-3 mt-4 mb-0 text-sm">
-          <div>
-            <dt className="archive-label m-0">页面</dt>
-            <dd className="font-mono text-archive-ink m-0 mt-0.5">
-              {source.pageCount > 0 ? (
-                <button
-                  type="button"
-                  className="font-mono text-archive-teal bg-transparent border-0 p-0 cursor-pointer hover:underline"
-                  onClick={handleBrowse}
-                  title="浏览文档"
-                >
-                  {source.pageCount}
-                </button>
-              ) : (
-                source.pageCount
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="archive-label m-0">失败</dt>
-            <dd className="font-mono text-archive-ink m-0 mt-0.5">{source.failedCount}</dd>
-          </div>
-          <div>
-            <dt className="archive-label m-0">上次同步</dt>
-            <dd className="text-archive-ink m-0 mt-0.5 text-xs">
-              {formatRelativeTime(source.lastSyncedAt)}
-            </dd>
-          </div>
-        </dl>
-
-        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-archive-line">
-          <Tooltip title="抓取模式">
-            <Tag variant="filled" className="m-0 uppercase text-xs">
-              {source.crawlMode}
-            </Tag>
-          </Tooltip>
-          <div className="flex-1" />
-          {source.pageCount > 0 && (
-            <Tooltip title="浏览文档">
-              <Button size="small" icon={<ReadOutlined />} onClick={handleBrowse} />
-            </Tooltip>
-          )}
-          <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(source.id)} />
-          <Button
-            type="primary"
-            size="small"
-            icon={<SyncOutlined spin={isSyncing} />}
-            loading={syncMutation.isPending}
-            disabled={isSyncing}
-            onClick={() =>
-              syncMutation.mutate(source.id, {
-                onError: (err) => {
-                  message.error(err instanceof Error ? err.message : '同步失败')
-                }
-              })
-            }
-          >
-            同步
-          </Button>
-          <Button
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            loading={deleteMutation.isPending}
-            onClick={handleDelete}
-          />
-        </div>
-      </div>
-    </article>
-  )
-}
+import { CrawlPreviewModal } from '@renderer/components/CrawlPreviewModal'
+import { CRAWL_MODE_SELECT_OPTIONS } from '@renderer/lib/crawl-mode'
+import { SourceCard } from '@renderer/components/SourceCard'
 
 export function SourcesPage(): React.JSX.Element {
   const { message } = App.useApp()
@@ -186,26 +19,39 @@ export function SourcesPage(): React.JSX.Element {
   const [addOpen, setAddOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [spaOpen, setSpaOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [pendingAdd, setPendingAdd] = useState<{
     name: string
     seedUrl: string
     crawlMode: CrawlMode
+    maxPages?: number | null
+    pathPrefix?: string
   } | null>(null)
-  const [form] = Form.useForm<{ name: string; seedUrl: string; crawlMode: CrawlMode }>()
+  const [form] = Form.useForm<{
+    name: string
+    seedUrl: string
+    crawlMode: CrawlMode
+    maxPages?: number | null
+    pathPrefix?: string
+  }>()
+  const seedUrlValue = Form.useWatch('seedUrl', form)
+  const crawlModeValue = Form.useWatch('crawlMode', form)
 
   const submitAdd = async (values: {
     name: string
     seedUrl: string
     crawlMode: CrawlMode
+    maxPages?: number | null
+    pathPrefix?: string
   }): Promise<void> => {
     if (values.crawlMode === 'auto') {
       setPendingAdd(values)
       setSpaOpen(true)
       try {
         const detection = await detectMutation.mutateAsync(values.seedUrl)
-        if (detection.confidence === 'likely_ssr') {
-          await addMutation.mutateAsync({ ...values, crawlMode: 'ssr' })
-          message.success('文档源已添加，正在同步…')
+        if (detection.previewCharCount === 0) {
+          await addMutation.mutateAsync({ ...values, crawlMode: 'spa' })
+          message.success('未检测到正文，已自动以 SPA 模式添加并同步…')
           form.resetFields()
           setAddOpen(false)
           setSpaOpen(false)
@@ -213,7 +59,7 @@ export function SourcesPage(): React.JSX.Element {
         }
         setPendingAdd({ ...values, crawlMode: detection.recommendedMode })
       } catch (err) {
-        message.error(err instanceof Error ? err.message : 'SPA 检测失败')
+        message.error(err instanceof Error ? err.message : '页面类型检测失败')
         setSpaOpen(false)
       }
       return
@@ -238,6 +84,17 @@ export function SourcesPage(): React.JSX.Element {
   const handleAdd = async (): Promise<void> => {
     const values = await form.validateFields()
     await submitAdd(values)
+  }
+
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const url = e.target.value
+    const currentName = form.getFieldValue('name')
+    if (!currentName && url) {
+      const generated = generateSourceName(url)
+      if (generated !== url) {
+        form.setFieldValue('name', generated)
+      }
+    }
   }
 
   return (
@@ -283,38 +140,73 @@ export function SourcesPage(): React.JSX.Element {
         onCancel={() => setAddOpen(false)}
         onOk={() => void handleAdd()}
         confirmLoading={addMutation.isPending || detectMutation.isPending}
-        okText="添加"
+        okText={
+          detectMutation.isPending
+            ? '正在检测页面类型…'
+            : (crawlModeValue ?? 'auto') === 'auto'
+              ? '检测并添加'
+              : '添加并同步'
+        }
         cancelText="取消"
         destroyOnHidden
       >
         <Form form={form} layout="vertical" className="mt-4">
-          <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入源名称' }]}>
-            <Input placeholder="例如 Electron-Vite" />
-          </Form.Item>
           <Form.Item
             name="seedUrl"
             label="起始 URL"
+            extra="输入任意一篇文档页地址，后面可选择只抓当前目录或扩大到上级目录。"
             rules={[
               { required: true, message: '请输入文档页 URL' },
               { type: 'url', message: '请输入有效的 URL' }
             ]}
           >
-            <Input placeholder="https://electron-vite.org/guide/" />
+            <Input placeholder="https://electron-vite.org/guide/" onChange={handleUrlChange} />
           </Form.Item>
-          <Form.Item name="crawlMode" label="抓取模式" initialValue="auto">
-            <Select
-              options={[
-                { value: 'ssr', label: 'SSR — 静态 HTML' },
-                { value: 'spa', label: 'SPA — JS 渲染 (v2)' },
-                { value: 'auto', label: '自动检测（推荐）' }
-              ]}
-            />
+          {seedUrlValue && (
+            <Form.Item name="pathPrefix" className="mb-4">
+              <ScopeDepthInput seedUrl={seedUrlValue} />
+            </Form.Item>
+          )}
+          <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入源名称' }]}>
+            <Input placeholder="例如 Electron-Vite" />
+          </Form.Item>
+          <Form.Item
+            label="抓取方式"
+            className="mb-0"
+            extra="自动判断会先预览页面正文，再让你确认最终抓取方式。"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <Form.Item name="crawlMode" initialValue="auto" noStyle>
+                <Select className="flex-1" options={CRAWL_MODE_SELECT_OPTIONS} />
+              </Form.Item>
+              <Form.Item
+                shouldUpdate={(prev, cur) =>
+                  prev.crawlMode !== cur.crawlMode || prev.seedUrl !== cur.seedUrl
+                }
+                noStyle
+              >
+                {({ getFieldValue }) => {
+                  const mode = getFieldValue('crawlMode') as CrawlMode
+                  const url = getFieldValue('seedUrl') as string
+                  if (mode === 'auto' || !url) return null
+                  return (
+                    <Button icon={<EyeOutlined />} onClick={() => setPreviewOpen(true)}>
+                      预览正文
+                    </Button>
+                  )
+                }}
+              </Form.Item>
+            </div>
+          </Form.Item>
+          <Form.Item name="maxPages" label="最大抓取页数">
+            <InputNumber min={1} className="w-full" placeholder="留空表示不限制" />
           </Form.Item>
         </Form>
       </Modal>
 
       <SpaConfirmModal
         open={spaOpen}
+        seedUrl={pendingAdd?.seedUrl ?? ''}
         detection={detectMutation.data ?? null}
         loading={addMutation.isPending}
         onConfirm={(mode) => void handleSpaConfirm(mode)}
@@ -325,6 +217,13 @@ export function SourcesPage(): React.JSX.Element {
       />
 
       <SourceEditModal sourceId={editId} open={Boolean(editId)} onClose={() => setEditId(null)} />
+
+      <CrawlPreviewModal
+        open={previewOpen}
+        seedUrl={seedUrlValue ?? ''}
+        mode={crawlModeValue ?? 'auto'}
+        onClose={() => setPreviewOpen(false)}
+      />
     </div>
   )
 }
