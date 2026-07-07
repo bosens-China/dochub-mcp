@@ -13,7 +13,9 @@ import type {
   DocSource,
   DocTreeNode,
   McpStatus,
+  OllamaStatus,
   SearchResult,
+  SearchMode,
   SourceDetail,
   SpaDetectionResult,
   SyncLogEntry,
@@ -28,6 +30,7 @@ import {
   fetchDocContent,
   fetchDocTree,
   fetchMcpStatus,
+  fetchOllamaStatus,
   fetchSettings,
   fetchSource,
   fetchSources,
@@ -199,12 +202,21 @@ export function useMcpStatus(): UseQueryResult<McpStatus> {
   })
 }
 
+export function useOllamaStatus(): UseQueryResult<OllamaStatus> {
+  return useQuery({
+    queryKey: queryKeys.ollamaStatus,
+    queryFn: fetchOllamaStatus,
+    refetchInterval: 10_000
+  })
+}
+
 export function useUpdateSettings(): UseMutationResult<AppSettings, Error, Partial<AppSettings>> {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (partial: Partial<AppSettings>) => updateSettings(partial),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.settings })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ollamaStatus })
     }
   })
 }
@@ -221,11 +233,12 @@ export function useTestMcpConnection(): UseMutationResult<
 
 export function useSearchDocuments(
   query: string,
-  sourceId: string | null
+  sourceId: string | null,
+  mode: SearchMode = 'keyword'
 ): UseQueryResult<SearchResult[]> {
   return useQuery({
-    queryKey: queryKeys.searchResults(query, sourceId),
-    queryFn: () => searchDocuments(query, sourceId),
+    queryKey: queryKeys.searchResults(query, sourceId, mode),
+    queryFn: () => searchDocuments(query, sourceId, mode),
     enabled: query.trim().length > 0,
     staleTime: 10_000
   })

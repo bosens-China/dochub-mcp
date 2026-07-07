@@ -2,7 +2,13 @@ import { ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc/channels'
 import { IPC_EVENTS } from '@shared/ipc/events'
 import type { DocHubAPI } from '@shared/ipc/api-types'
-import type { AddSourceInput, AppSettings, CrawlMode, UpdateSourceInput } from '@shared/types'
+import type {
+  AddSourceInput,
+  AppSettings,
+  CrawlMode,
+  SearchMode,
+  UpdateSourceInput
+} from '@shared/types'
 
 export function createDocHubAPI(): DocHubAPI {
   return {
@@ -28,11 +34,19 @@ export function createDocHubAPI(): DocHubAPI {
     getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.settings.get),
     updateSettings: (partial: Partial<AppSettings>) =>
       ipcRenderer.invoke(IPC_CHANNELS.settings.update, partial),
-    searchDocuments: (query: string, sourceId: string | null) =>
-      ipcRenderer.invoke(IPC_CHANNELS.docs.search, query, sourceId),
+    searchDocuments: (
+      query: string,
+      sourceId: string | null,
+      mode?: SearchMode,
+      limit?: number,
+      rerank?: boolean,
+      minScore?: number
+    ) =>
+      ipcRenderer.invoke(IPC_CHANNELS.docs.search, query, sourceId, mode, limit, rerank, minScore),
     testMcpConnection: (host: string, port: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.mcp.testConnection, host, port),
     getMcpStatus: () => ipcRenderer.invoke(IPC_CHANNELS.mcp.getStatus),
+    getOllamaStatus: () => ipcRenderer.invoke(IPC_CHANNELS.ollama.getStatus),
     onDeveloperPanelToggle: (listener: () => void) => {
       const channel = IPC_EVENTS.dev.togglePanel
       const handler = (): void => {

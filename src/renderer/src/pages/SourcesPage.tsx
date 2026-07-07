@@ -10,6 +10,7 @@ import { SpaConfirmModal } from '@renderer/components/SpaConfirmModal'
 import { CrawlPreviewModal } from '@renderer/components/CrawlPreviewModal'
 import { CRAWL_MODE_SELECT_OPTIONS } from '@renderer/lib/crawl-mode'
 import { SourceCard } from '@renderer/components/SourceCard'
+import { SourceScheduleFields } from '@renderer/components/SourceScheduleFields'
 
 export function SourcesPage(): React.JSX.Element {
   const { message } = App.useApp()
@@ -26,6 +27,11 @@ export function SourcesPage(): React.JSX.Element {
     crawlMode: CrawlMode
     maxPages?: number | null
     pathPrefix?: string
+    schedule?: {
+      enabled: boolean
+      interval: number
+      unit: 'hour' | 'day' | 'week' | 'month'
+    }
   } | null>(null)
   const [form] = Form.useForm<{
     name: string
@@ -33,6 +39,11 @@ export function SourcesPage(): React.JSX.Element {
     crawlMode: CrawlMode
     maxPages?: number | null
     pathPrefix?: string
+    schedule?: {
+      enabled: boolean
+      interval: number
+      unit: 'hour' | 'day' | 'week' | 'month'
+    }
   }>()
   const seedUrlValue = Form.useWatch('seedUrl', form)
   const crawlModeValue = Form.useWatch('crawlMode', form)
@@ -43,6 +54,11 @@ export function SourcesPage(): React.JSX.Element {
     crawlMode: CrawlMode
     maxPages?: number | null
     pathPrefix?: string
+    schedule?: {
+      enabled: boolean
+      interval: number
+      unit: 'hour' | 'day' | 'week' | 'month'
+    }
   }): Promise<void> => {
     if (values.crawlMode === 'auto') {
       setPendingAdd(values)
@@ -201,6 +217,7 @@ export function SourcesPage(): React.JSX.Element {
           <Form.Item name="maxPages" label="最大抓取页数">
             <InputNumber min={1} className="w-full" placeholder="留空表示不限制" />
           </Form.Item>
+          <SourceScheduleFields />
         </Form>
       </Modal>
 

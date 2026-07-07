@@ -11,4 +11,10 @@ export {
   getSyncLogPath
 } from './paths'
 
-export { ensureDataDirs, loadConfig, mergeCrawlConfig, saveConfig } from './load'
+export {
+  ensureDataDirs,
+  loadConfig,
+  mergeCrawlConfig,
+  saveConfig,
+  saveConfigReference
+} from './load'

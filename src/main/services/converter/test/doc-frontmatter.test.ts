@@ -9,6 +9,8 @@ describe('doc frontmatter', () => {
         originalUrl: 'https://electron-vite.org/guide/',
         title: 'Guide',
         contentHash: 'sha256:abc',
+        sourceContentHash: 'sha256:raw',
+        language: 'en-US',
         syncedAt: '2026-06-26T10:00:00.000Z'
       },
       'Hello [install](./installation.md)'
@@ -16,6 +18,8 @@ describe('doc frontmatter', () => {
 
     const parsed = parseDocFile(raw)
     expect(parsed?.frontmatter.title).toBe('Guide')
+    expect(parsed?.frontmatter.sourceContentHash).toBe('sha256:raw')
+    expect(parsed?.frontmatter.language).toBe('en-US')
     expect(parsed?.body).toBe('Hello [install](./installation.md)')
   })
 

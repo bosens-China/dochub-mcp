@@ -1,5 +1,7 @@
 import { htmlToMarkdown } from '@mdream/js'
 import { withMinimalPreset } from '@mdream/js/preset/minimal'
+import { Readability } from '@mozilla/readability'
+import { JSDOM } from 'jsdom'
 import TurndownService from 'turndown'
 import { gfm } from '@joplin/turndown-plugin-gfm'
 import { load } from 'cheerio'
@@ -27,7 +29,21 @@ const NON_CONTENT_SELECTORS = [
   'header'
 ]
 
-function readableHtml(html: string): string {
+function readabilityContentHtml(html: string, url: string): string | null {
+  const dom = new JSDOM(html, { url })
+  try {
+    const article = new Readability(dom.window.document).parse()
+    const textLength = article?.textContent?.replace(/\s+/g, ' ').trim().length ?? 0
+    if (!article?.content || textLength < 200) return null
+    return article.content
+  } catch {
+    return null
+  } finally {
+    dom.window.close()
+  }
+}
+
+function readableHtml(html: string, url: string): string {
   const $ = load(html)
   $(NON_CONTENT_SELECTORS.join(',')).remove()
 
@@ -40,12 +56,12 @@ function readableHtml(html: string): string {
     }
   }
 
-  return $.html()
+  return readabilityContentHtml($.html(), url) ?? $.html()
 }
 
 export function htmlToMd(options: ConvertOptions): string {
   const { html, url, title } = options
-  const contentHtml = readableHtml(html)
+  const contentHtml = readableHtml(html, url)
   try {
     const md = htmlToMarkdown(
       contentHtml,
@@ -81,6 +97,7 @@ sourceUrl: ${sourceUrl}
 originalUrl: ${originalUrl}
 title: ${title.replace(/\n/g, ' ')}
 contentHash: sha256:${contentHash}
+sourceContentHash: sha256:${contentHash}
 syncedAt: ${syncedAt}
 ---
 

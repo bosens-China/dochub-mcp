@@ -1,9 +1,17 @@
 import { load } from 'cheerio'
-import type { CrawlConfig } from '@shared/types/config'
+import type { CrawlConfig, SpaDetectionConfig } from '@shared/types/config'
 import type { CrawlMode } from '@shared/types'
 import { SPA_MARKDOWN_PREVIEW_THRESHOLD } from '@shared/constants/spa-detection'
 import { fetchUrl, type FetchOptions } from '../crawler/fetcher'
 import { htmlToMd } from '../converter/html-to-md'
+
+const DEFAULT_SPA_DETECTION: SpaDetectionConfig = {
+  alwaysConfirm: false,
+  ssrScoreMax: 30,
+  spaScoreMin: 61,
+  minBodyCharsForSsr: 500,
+  autoRetryMinMdChars: 200
+}
 
 export interface SpaSignal {
   id: string
@@ -23,13 +31,15 @@ export interface SpaDetectionResult {
 
 export function scoreSpaDetection(
   html: string,
-  previewCharCount: number
+  previewCharCount: number,
+  config: Pick<SpaDetectionConfig, 'minBodyCharsForSsr'> = DEFAULT_SPA_DETECTION
 ): { score: number; signals: SpaSignal[] } {
   const $ = load(html)
   const bodyText = $('body').text().replace(/\s+/g, ' ').trim()
   const charCount = bodyText.length
   const scriptCount = $('script[src]').length
   const htmlLower = html.toLowerCase()
+  const minBodyChars = config.minBodyCharsForSsr
 
   const signals: SpaSignal[] = [
     {
@@ -41,8 +51,8 @@ export function scoreSpaDetection(
     {
       id: 'low_body_text',
       weight: 30,
-      hit: charCount < 500,
-      label: '正文过少（<500 字符）'
+      hit: charCount < minBodyChars,
+      label: `正文过少（<${minBodyChars} 字符）`
     },
     {
       id: 'root_shell',
@@ -90,9 +100,12 @@ export function scoreSpaDetection(
   return { score, signals }
 }
 
-function confidenceFromScore(score: number): SpaDetectionResult['confidence'] {
-  if (score <= 30) return 'likely_ssr'
-  if (score >= 61) return 'likely_spa'
+function confidenceFromScore(
+  score: number,
+  config: Pick<SpaDetectionConfig, 'ssrScoreMax' | 'spaScoreMin'>
+): SpaDetectionResult['confidence'] {
+  if (score <= config.ssrScoreMax) return 'likely_ssr'
+  if (score >= config.spaScoreMin) return 'likely_spa'
   return 'uncertain'
 }
 
@@ -105,7 +118,8 @@ function recommendedMode(confidence: SpaDetectionResult['confidence']): CrawlMod
 export async function detectSpa(
   seedUrl: string,
   crawl: CrawlConfig,
-  customHeaders: Record<string, string> = {}
+  customHeaders: Record<string, string> = {},
+  spaDetection: SpaDetectionConfig = DEFAULT_SPA_DETECTION
 ): Promise<SpaDetectionResult> {
   const fetchOpts: FetchOptions = { crawl, customHeaders }
   const result = await fetchUrl(seedUrl, fetchOpts)
@@ -116,8 +130,8 @@ export async function detectSpa(
     title: pageTitle
   })
   const previewCharCount = previewMarkdown.length
-  const { score, signals } = scoreSpaDetection(result.body, previewCharCount)
-  const confidence = confidenceFromScore(score)
+  const { score, signals } = scoreSpaDetection(result.body, previewCharCount, spaDetection)
+  const confidence = confidenceFromScore(score, spaDetection)
 
   return {
     confidence,
@@ -127,4 +141,14 @@ export async function detectSpa(
     previewMarkdown,
     previewCharCount
   }
+}
+
+export function shouldRetryWithSpa(
+  html: string,
+  markdownCharCount: number,
+  spaDetection: SpaDetectionConfig
+): boolean {
+  if (markdownCharCount >= spaDetection.autoRetryMinMdChars) return false
+  const { score } = scoreSpaDetection(html, markdownCharCount, spaDetection)
+  return score >= spaDetection.spaScoreMin
 }

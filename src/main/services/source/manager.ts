@@ -9,13 +9,14 @@ import type {
   DocSource,
   DocTreeNode,
   SearchResult,
+  SearchMode,
   SourceDetail,
   SpaDetectionResult,
   SyncLogEntry,
   SyncProgress,
   UpdateSourceInput
 } from '@shared/types'
-import { loadConfig, saveConfig, ensureDataDirs } from '../../config'
+import { loadConfig, saveConfig, saveConfigReference, ensureDataDirs } from '../../config'
 import { toDocSource, toSourceDetail } from '../source/util'
 import {
   createAndWriteSourceRecord,
@@ -39,8 +40,18 @@ import { detectSpa as runSpaDetect } from '../discovery/spa-detect'
 import { fetchUrl } from '../crawler/fetcher'
 import { htmlToMd } from '../converter/html-to-md'
 import { searchKeyword } from '../indexer/fts'
+import { searchSemantic, type VectorSearchResult } from '../indexer/vector'
+import { buildTranslatedSearchQueries } from '../ollama/query-translation'
+import { rerankSearchResults, type RerankOverrides } from '../ollama/rerank'
+import { refreshSyncScheduler } from '../scheduler/sync-scheduler'
 import { mcpHealthUrl } from '@shared/constants/mcp'
 import { logger } from '../logger/app-logger'
+import { toUiSettings } from './settings'
+import { errorMessage, shouldFallbackToKeywordSearch } from './search-fallback'
+
+const DEFAULT_SEARCH_LIMIT = 20
+const MAX_SEARCH_LIMIT = 50
+const RRF_K = 60
 
 function buildTree(nodes: Array<{ key: string; title: string; isLeaf?: boolean }>): DocTreeNode[] {
   const root: DocTreeNode[] = []
@@ -71,25 +82,6 @@ function buildTree(nodes: Array<{ key: string; title: string; isLeaf?: boolean }
     }
   }
   return root
-}
-
-function toUiSettings(config: AppConfig): AppSettings {
-  return {
-    dataDir: config.dataDir,
-    mcp: config.mcp,
-    crawl: {
-      respectRobots: config.crawl.respectRobots,
-      concurrency: config.crawl.concurrency,
-      rateLimitMode: config.crawl.rateLimit.mode,
-      rateLimitFixedMs: config.crawl.rateLimit.fixedMs,
-      rateLimitRandomMinMs: config.crawl.rateLimit.randomMinMs,
-      rateLimitRandomMaxMs: config.crawl.rateLimit.randomMaxMs,
-      requestTimeoutMs: config.crawl.requestTimeoutMs,
-      userAgent: config.crawl.userAgent,
-      defaultHeaders: config.crawl.defaultHeaders
-    },
-    ui: config.ui
-  }
 }
 
 function toSyncLogEntries(
@@ -125,6 +117,47 @@ function toSyncLogEntries(
   }))
 }
 
+function clampSearchLimit(limit?: number): number {
+  if (!limit) return DEFAULT_SEARCH_LIMIT
+  return Math.max(1, Math.min(MAX_SEARCH_LIMIT, Math.floor(limit)))
+}
+
+function searchKey(result: Pick<SearchResult, 'sourceId' | 'docPath'>): string {
+  return `${result.sourceId}::${result.docPath}`
+}
+
+function fuseRankedResults(resultGroups: SearchResult[][], limit: number): SearchResult[] {
+  const scores = new Map<string, { result: SearchResult; score: number }>()
+  const add = (results: SearchResult[]): void => {
+    results.forEach((result, index) => {
+      const key = searchKey(result)
+      const current = scores.get(key)
+      const score = (current?.score ?? 0) + 1 / (RRF_K + index + 1)
+      scores.set(key, { result: current?.result ?? result, score })
+    })
+  }
+
+  for (const group of resultGroups) {
+    add(group)
+  }
+  return [...scores.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ result, score }) => ({ ...result, score }))
+}
+
+function fuseSearchResults(
+  keywordResults: SearchResult[],
+  semanticResults: SearchResult[],
+  limit: number,
+  mode: SearchMode
+): SearchResult[] {
+  return fuseRankedResults([keywordResults, semanticResults], limit).map((result) => ({
+    ...result,
+    mode
+  }))
+}
+
 export class SourceManager {
   private config: AppConfig | null = null
 
@@ -153,17 +186,24 @@ export class SourceManager {
     const record = await createAndWriteSourceRecord(input, this.cfg())
     const source = toDocSource(record)
     this.triggerSync(record.id)
+    void refreshSyncScheduler(this.cfg())
     return source
   }
 
   async updateSource(input: UpdateSourceInput): Promise<DocSource> {
     const record = await updateSourceRecord(input, this.cfg())
+    void refreshSyncScheduler(this.cfg())
     return toDocSource(record)
   }
 
   async detectSpa(seedUrl: string): Promise<SpaDetectionResult> {
     const config = this.cfg()
-    const result = await runSpaDetect(seedUrl, config.crawl, config.crawl.defaultHeaders)
+    const result = await runSpaDetect(
+      seedUrl,
+      config.crawl,
+      config.crawl.defaultHeaders,
+      config.spaDetection
+    )
     return {
       confidence: result.confidence,
       score: result.score,
@@ -183,13 +223,15 @@ export class SourceManager {
     const config = this.cfg()
     const result = await fetchUrl(url, {
       crawl: config.crawl,
-      crawlMode: mode
+      crawlMode: mode,
+      spaRender: config.spaRender
     })
     return htmlToMd({ html: result.body, url: result.finalUrl, title: url })
   }
 
   async deleteSource(id: string): Promise<void> {
     await deleteSourceRecord(id, this.cfg())
+    void refreshSyncScheduler(this.cfg())
   }
 
   triggerSync(sourceId: string): void {
@@ -276,26 +318,104 @@ export class SourceManager {
           randomMaxMs: partial.crawl?.rateLimitRandomMaxMs ?? current.crawl.rateLimit.randomMaxMs
         }
       },
+      spaDetection: { ...current.spaDetection, ...partial.spaDetection },
+      spaRender: { ...current.spaRender, ...partial.spaRender },
+      ollama: {
+        ...current.ollama,
+        ...partial.ollama,
+        queryTranslation: {
+          ...current.ollama.queryTranslation,
+          ...partial.ollama?.queryTranslation
+        },
+        rerank: {
+          ...current.ollama.rerank,
+          ...partial.ollama?.rerank
+        }
+      },
       ui: { ...current.ui, ...partial.ui }
     }
+    await ensureDataDirs(next)
     await saveConfig(next)
+    await saveConfigReference(next)
     this.config = next
+    void refreshSyncScheduler(next)
     return toUiSettings(next)
   }
 
-  async searchDocuments(query: string, sourceId: string | null): Promise<SearchResult[]> {
+  async searchDocuments(
+    query: string,
+    sourceId: string | null,
+    mode: SearchMode = 'keyword',
+    limit?: number,
+    rerankOverrides: RerankOverrides = {}
+  ): Promise<SearchResult[]> {
     const config = this.cfg()
-    const raw = searchKeyword(query.trim(), sourceId, config)
-    // 补充 sourceName：批量读取已知源名
+    const cleanQuery = query.trim()
+    const max = clampSearchLimit(limit)
+    const queries = await buildTranslatedSearchQueries(cleanQuery, config.ollama)
     const records = await listSourceRecords(config)
     const nameMap = new Map(records.map((r) => [r.id, r.name]))
-    return raw.map((r) => ({
+    const nameFor = (id: string): string => nameMap.get(id) ?? id
+    const toKeywordResults = (): SearchResult[] => {
+      const groups = queries.map((searchQuery) =>
+        searchKeyword(searchQuery, sourceId, config, max).map((r) => ({
+          sourceId: r.sourceId,
+          sourceName: nameFor(r.sourceId),
+          docPath: r.docPath,
+          title: r.title,
+          snippet: r.snippet,
+          mode: 'keyword' as const
+        }))
+      )
+      return fuseRankedResults(groups, max).map((result) => ({ ...result, mode: 'keyword' }))
+    }
+    const toSemanticResult = (r: VectorSearchResult): SearchResult => ({
       sourceId: r.sourceId,
-      sourceName: nameMap.get(r.sourceId) ?? r.sourceId,
+      sourceName: nameFor(r.sourceId),
       docPath: r.docPath,
       title: r.title,
-      snippet: r.snippet
-    }))
+      snippet: r.snippet,
+      score: r.score,
+      mode: 'semantic'
+    })
+    const toSemanticResults = async (): Promise<SearchResult[]> => {
+      const groups: SearchResult[][] = []
+      for (const searchQuery of queries) {
+        groups.push(
+          (await searchSemantic(searchQuery, sourceId, config, max)).map(toSemanticResult)
+        )
+      }
+      return fuseRankedResults(groups, max).map((result) => ({ ...result, mode: 'semantic' }))
+    }
+
+    if (mode === 'keyword') {
+      return rerankSearchResults(cleanQuery, toKeywordResults(), config.ollama, rerankOverrides)
+    }
+
+    let semanticResults: SearchResult[]
+    try {
+      semanticResults = await toSemanticResults()
+    } catch (err) {
+      if (!shouldFallbackToKeywordSearch(err)) throw err
+      logger.warn('search', 'Ollama 不可用，搜索已降级为关键词模式', {
+        mode,
+        error: errorMessage(err)
+      })
+      return rerankSearchResults(cleanQuery, toKeywordResults(), config.ollama, {
+        ...rerankOverrides,
+        enabled: false
+      })
+    }
+    if (mode === 'semantic') {
+      return rerankSearchResults(cleanQuery, semanticResults, config.ollama, rerankOverrides)
+    }
+
+    return rerankSearchResults(
+      cleanQuery,
+      fuseSearchResults(toKeywordResults(), semanticResults, max, 'hybrid'),
+      config.ollama,
+      rerankOverrides
+    )
   }
 
   async testMcpConnection(host: string, port: number): Promise<boolean> {

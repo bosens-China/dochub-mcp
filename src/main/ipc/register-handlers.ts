@@ -1,11 +1,20 @@
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc/channels'
 import { mcpHealthUrl } from '@shared/constants/mcp'
-import type { AddSourceInput, AppSettings, CrawlMode, UpdateSourceInput } from '@shared/types'
+import type {
+  AddSourceInput,
+  AppSettings,
+  CrawlMode,
+  SourceScheduleInput,
+  SearchMode,
+  UpdateSourceInput
+} from '@shared/types'
 import { sourceManager } from '../services/source/manager'
 import { loadConfig } from '../config'
 import { getMcpStatus, restartMcpServer } from '../services/mcp/lifecycle'
 import { readAppLogs, setLoggerConfig } from '../services/logger/app-logger'
+import { getOllamaStatus } from '../services/ollama/client'
+import { getVectorIndexStatus } from '../services/indexer/vector-queue'
 
 const MCP_TEST_TIMEOUT_MS = 5_000
 
@@ -42,7 +51,30 @@ function assertAddSourceInput(input: unknown): AddSourceInput {
     seedUrl: seedUrl.trim(),
     crawlMode,
     maxPages: (input as AddSourceInput).maxPages ?? null,
-    pathPrefix: (input as AddSourceInput).pathPrefix?.trim()
+    pathPrefix: (input as AddSourceInput).pathPrefix?.trim(),
+    schedule: assertScheduleInput((input as { schedule?: unknown }).schedule)
+  }
+}
+
+function assertScheduleInput(input: unknown): SourceScheduleInput | undefined {
+  if (input === undefined || input === null) return undefined
+  if (typeof input !== 'object') {
+    throw new Error('无效的定时同步设置')
+  }
+  const raw = input as Partial<SourceScheduleInput>
+  if (typeof raw.enabled !== 'boolean') {
+    throw new Error('无效的定时同步开关')
+  }
+  if (typeof raw.interval !== 'number' || !Number.isInteger(raw.interval) || raw.interval < 1) {
+    throw new Error('定时同步间隔须为正整数')
+  }
+  if (!raw.unit || !['hour', 'day', 'week', 'month'].includes(raw.unit)) {
+    throw new Error('无效的定时同步单位')
+  }
+  return {
+    enabled: raw.enabled,
+    interval: raw.interval,
+    unit: raw.unit
   }
 }
 
@@ -74,7 +106,8 @@ function assertUpdateSourceInput(input: unknown): UpdateSourceInput {
     concurrency: raw.concurrency,
     maxRetriesPerUrl: raw.maxRetriesPerUrl,
     maxPages: raw.maxPages,
-    pathPrefix: raw.pathPrefix?.trim()
+    pathPrefix: raw.pathPrefix?.trim(),
+    schedule: assertScheduleInput((input as { schedule?: unknown }).schedule)
   }
 }
 
@@ -111,6 +144,55 @@ function assertSettingsPartial(partial: unknown): Partial<AppSettings> {
 
   if (raw.ui !== undefined && (typeof raw.ui !== 'object' || raw.ui === null)) {
     throw new Error('无效的 UI 设置')
+  }
+
+  if (raw.spaDetection !== undefined) {
+    if (typeof raw.spaDetection !== 'object' || raw.spaDetection === null) {
+      throw new Error('无效的 SPA 侦测设置')
+    }
+    if (
+      typeof raw.spaDetection.autoRetryMinMdChars === 'number' &&
+      raw.spaDetection.autoRetryMinMdChars < 0
+    ) {
+      throw new Error('SPA 自动重试阈值不能小于 0')
+    }
+  }
+
+  if (raw.spaRender !== undefined) {
+    if (typeof raw.spaRender !== 'object' || raw.spaRender === null) {
+      throw new Error('无效的 SPA 渲染设置')
+    }
+    if (typeof raw.spaRender.timeoutMs === 'number' && raw.spaRender.timeoutMs < 1000) {
+      throw new Error('SPA 渲染超时不能小于 1000ms')
+    }
+    if (
+      raw.spaRender.waitUntil !== undefined &&
+      !['domcontentloaded', 'load', 'networkidle'].includes(raw.spaRender.waitUntil)
+    ) {
+      throw new Error('无效的 SPA waitUntil')
+    }
+  }
+
+  if (raw.ollama !== undefined) {
+    if (typeof raw.ollama !== 'object' || raw.ollama === null) {
+      throw new Error('无效的 Ollama 设置')
+    }
+    if (typeof raw.ollama.baseUrl === 'string') {
+      new URL(raw.ollama.baseUrl)
+    }
+    if (
+      typeof raw.ollama.embeddingConcurrency === 'number' &&
+      (raw.ollama.embeddingConcurrency < 1 || raw.ollama.embeddingConcurrency > 8)
+    ) {
+      throw new Error('向量索引并发数须在 1–8 之间')
+    }
+    if (
+      raw.ollama.rerank &&
+      typeof raw.ollama.rerank === 'object' &&
+      (raw.ollama.rerank.minScore < 0 || raw.ollama.rerank.minScore > 1)
+    ) {
+      throw new Error('Rerank minScore 须在 0–1 之间')
+    }
   }
 
   return raw
@@ -232,13 +314,47 @@ export async function registerIpcHandlers(): Promise<void> {
 
   ipcMain.handle(IPC_CHANNELS.mcp.getStatus, () => getMcpStatus())
 
-  ipcMain.handle(IPC_CHANNELS.docs.search, (_event, query: unknown, sourceId: unknown) => {
-    if (typeof query !== 'string' || !query.trim()) {
-      throw new Error('搜索关键词不能为空')
-    }
-    const sid = sourceId === null || sourceId === undefined ? null : String(sourceId)
-    return sourceManager.searchDocuments(query, sid)
+  ipcMain.handle(IPC_CHANNELS.ollama.getStatus, async () => {
+    const config = await loadConfig()
+    return getOllamaStatus(config.ollama, getVectorIndexStatus(config))
   })
+
+  ipcMain.handle(
+    IPC_CHANNELS.docs.search,
+    (
+      _event,
+      query: unknown,
+      sourceId: unknown,
+      mode: unknown,
+      limit: unknown,
+      rerank: unknown,
+      minScore: unknown
+    ) => {
+      if (typeof query !== 'string' || !query.trim()) {
+        throw new Error('搜索关键词不能为空')
+      }
+      const sid = sourceId === null || sourceId === undefined ? null : String(sourceId)
+      const searchMode =
+        mode === undefined ? 'keyword' : typeof mode === 'string' ? mode : 'keyword'
+      if (!['keyword', 'semantic', 'hybrid'].includes(searchMode)) {
+        throw new Error('无效的搜索模式')
+      }
+      const max = typeof limit === 'number' ? limit : undefined
+      if (rerank !== undefined && typeof rerank !== 'boolean') {
+        throw new Error('无效的 Rerank 参数')
+      }
+      if (
+        minScore !== undefined &&
+        (typeof minScore !== 'number' || minScore < 0 || minScore > 1)
+      ) {
+        throw new Error('Rerank minScore 须在 0–1 之间')
+      }
+      return sourceManager.searchDocuments(query, sid, searchMode as SearchMode, max, {
+        enabled: rerank,
+        minScore
+      })
+    }
+  )
 
   ipcMain.handle(IPC_CHANNELS.mcp.testConnection, (_event, host: unknown, port: unknown) => {
     if (typeof host !== 'string' || !host) {

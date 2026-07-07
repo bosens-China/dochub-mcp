@@ -2,14 +2,39 @@ import { mkdir, readFile, writeFile, readdir, rm } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import type { AppConfig } from '@shared/types/config'
-import type { AddSourceInput, SourceRecord, UpdateSourceInput } from '@shared/types'
+import type {
+  AddSourceInput,
+  SourceRecord,
+  SourceScheduleInput,
+  UpdateSourceInput
+} from '@shared/types'
 import { SourceRecordSchema } from '@shared/types'
 import { getSourceDir, getSourcesDir } from '../../config/paths'
 import { pathPrefixFromSeed, slugFromUrl } from './util'
 import { removeSourceIndex } from '../indexer/fts'
+import { removeSourceVectors } from '../indexer/vector'
+import { cancelSourceVectorIndex } from '../indexer/vector-queue'
+
+const SOURCE_ID_RE = /^[a-z0-9][a-z0-9-]*$/
+
+function assertSafeSourceId(sourceId: string): void {
+  if (!SOURCE_ID_RE.test(sourceId)) {
+    throw new Error(`无效的文档源 ID: ${sourceId}`)
+  }
+}
 
 function sourceRecordPath(sourceId: string, config: AppConfig): string {
+  assertSafeSourceId(sourceId)
   return join(getSourceDir(sourceId, config), '_source.json')
+}
+
+function scheduleFromInput(input?: SourceScheduleInput): SourceRecord['schedule'] {
+  return {
+    enabled: input?.enabled ?? false,
+    interval: input?.interval ?? 1,
+    unit: input?.unit ?? 'day',
+    nextRunAt: null
+  }
 }
 
 export async function listSourceRecords(config: AppConfig): Promise<SourceRecord[]> {
@@ -38,6 +63,7 @@ export async function readSourceRecord(
 }
 
 export async function writeSourceRecord(record: SourceRecord, config: AppConfig): Promise<void> {
+  assertSafeSourceId(record.id)
   const dir = getSourceDir(record.id, config)
   await mkdir(join(dir, 'docs'), { recursive: true })
   const path = sourceRecordPath(record.id, config)
@@ -72,6 +98,7 @@ export async function createAndWriteSourceRecord(
       excludePatterns: [],
       maxPages: input.maxPages ?? null
     },
+    schedule: scheduleFromInput(input.schedule),
     sync: {
       status: 'idle',
       lastSyncAt: null,
@@ -106,6 +133,7 @@ export function createSourceRecord(input: AddSourceInput): SourceRecord {
       excludePatterns: [],
       maxPages: input.maxPages ?? null
     },
+    schedule: scheduleFromInput(input.schedule),
     sync: {
       status: 'idle',
       lastSyncAt: null,
@@ -148,6 +176,7 @@ export async function updateSourceRecord(
       maxRetriesPerUrl: input.maxRetriesPerUrl ?? existing.crawl.maxRetriesPerUrl,
       maxPages: input.maxPages !== undefined ? input.maxPages : existing.crawl.maxPages
     },
+    schedule: input.schedule ? scheduleFromInput(input.schedule) : existing.schedule,
     updatedAt: new Date().toISOString()
   })
 
@@ -156,9 +185,16 @@ export async function updateSourceRecord(
 }
 
 export async function deleteSourceRecord(sourceId: string, config: AppConfig): Promise<void> {
+  assertSafeSourceId(sourceId)
+  const existing = await readSourceRecord(sourceId, config)
+  if (!existing) {
+    throw new Error(`文档源不存在: ${sourceId}`)
+  }
   // 先清理 FTS 索引，再删除文件（避免 orphan 索引污染搜索结果）
   try {
+    cancelSourceVectorIndex(sourceId)
     removeSourceIndex(sourceId, config)
+    removeSourceVectors(sourceId, config)
   } catch {
     // 如果索引不存在或已损坏，不阻断删源
   }
@@ -169,13 +205,16 @@ export async function deleteSourceRecord(sourceId: string, config: AppConfig): P
 }
 
 export function sourceDocsDir(sourceId: string, config: AppConfig): string {
+  assertSafeSourceId(sourceId)
   return join(getSourceDir(sourceId, config), 'docs')
 }
 
 export function sourceTreePath(sourceId: string, config: AppConfig): string {
+  assertSafeSourceId(sourceId)
   return join(getSourceDir(sourceId, config), '_tree.txt')
 }
 
 export function sourceMetaPath(sourceId: string, config: AppConfig): string {
+  assertSafeSourceId(sourceId)
   return join(getSourceDir(sourceId, config), '_meta.json')
 }

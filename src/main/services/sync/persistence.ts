@@ -64,7 +64,11 @@ export async function readSyncLogs(
     await handle.close()
   }
 }
-export function createCheckpoint(sourceId: string, pending: string[]): Checkpoint {
+export function createCheckpoint(
+  sourceId: string,
+  pending: string[],
+  previousCompleted: Checkpoint['previousCompleted'] = {}
+): Checkpoint {
   const now = new Date().toISOString()
   return CheckpointSchema.parse({
     sourceId,
@@ -73,6 +77,7 @@ export function createCheckpoint(sourceId: string, pending: string[]): Checkpoin
     status: 'running',
     pending,
     completed: {},
+    previousCompleted,
     failed: {},
     domainFailureCount: 0
   })

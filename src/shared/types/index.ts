@@ -1,5 +1,18 @@
-export type { AppConfig, CrawlConfig, RateLimitConfig } from './config'
-export { AppConfigSchema, CrawlConfigSchema } from './config'
+export type {
+  AppConfig,
+  CrawlConfig,
+  OllamaConfig,
+  RateLimitConfig,
+  SpaDetectionConfig,
+  SpaRenderConfig
+} from './config'
+export {
+  AppConfigSchema,
+  CrawlConfigSchema,
+  OllamaConfigSchema,
+  SpaDetectionConfigSchema,
+  SpaRenderConfigSchema
+} from './config'
 
 export type {
   AddSourceInput,
@@ -11,9 +24,13 @@ export type {
   DocContent,
   DocSource,
   DocTreeNode,
+  ScheduleUnit,
+  SearchMode,
   SearchResult,
   SourceCrawl,
   SourceRecord,
+  SourceSchedule,
+  SourceScheduleInput,
   SourceSync,
   SyncLogAction,
   SyncLogEntry,
@@ -31,4 +48,5 @@ export type { SourceMeta, SourceMetaDocument } from './source-meta'
 export { SourceMetaSchema, SourceMetaDocumentSchema } from './source-meta'
 
 export type { McpStatus } from './mcp-status'
+export type { OllamaModel, OllamaStatus, OllamaVectorIndexStatus } from './ollama'
 export type { AppLogEntry, AppLogLevel } from './app-log'

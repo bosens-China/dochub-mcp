@@ -1,11 +1,34 @@
-import { useState, useRef } from 'react'
-import { Empty, Input, Select, Spin, Tag, Typography } from 'antd'
+import { useState, useRef, type ReactNode } from 'react'
+import { Alert, Empty, Input, Select, Spin, Tag, Typography } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { useSearchDocuments, useSources } from '@renderer/hooks/use-app-data'
-import type { SearchResult } from '@shared/types'
+import type { SearchMode, SearchResult } from '@shared/types'
 import { useRouter } from '@tanstack/react-router'
 
 const { Text } = Typography
+
+function renderSnippet(snippet: string): ReactNode[] {
+  const nodes: ReactNode[] = []
+  let highlighted = false
+  let index = 0
+
+  for (const part of snippet.split(/(<b>|<\/b>)/g)) {
+    if (part === '<b>') {
+      highlighted = true
+      continue
+    }
+    if (part === '</b>') {
+      highlighted = false
+      continue
+    }
+    if (!part) continue
+
+    nodes.push(highlighted ? <b key={index}>{part}</b> : <span key={index}>{part}</span>)
+    index += 1
+  }
+
+  return nodes
+}
 
 function ResultCard({
   result,
@@ -28,11 +51,9 @@ function ResultCard({
           <p className="font-mono text-xs text-archive-muted m-0 mt-0.5 truncate">
             {result.docPath}
           </p>
-          <div
-            className="text-sm text-archive-muted mt-2 mb-0 leading-relaxed line-clamp-2 [&_b]:text-archive-teal [&_b]:font-medium"
-            // snippet 含 FTS 高亮 <b> 标签
-            dangerouslySetInnerHTML={{ __html: result.snippet }}
-          />
+          <div className="text-sm text-archive-muted mt-2 mb-0 leading-relaxed line-clamp-2 [&_b]:text-archive-teal [&_b]:font-medium">
+            {renderSnippet(result.snippet)}
+          </div>
         </div>
         <Tag color="cyan" className="shrink-0 font-mono text-xs">
           {result.sourceName}
@@ -46,10 +67,16 @@ export function SearchPage(): React.JSX.Element {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [selectedSource, setSelectedSource] = useState<string | null>(null)
+  const [mode, setMode] = useState<SearchMode>('keyword')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { data: sources } = useSources()
-  const { data: results, isFetching } = useSearchDocuments(debouncedQuery, selectedSource)
+  const {
+    data: results,
+    error,
+    isError,
+    isFetching
+  } = useSearchDocuments(debouncedQuery, selectedSource, mode)
   const router = useRouter()
 
   const handleQueryChange = (value: string): void => {
@@ -71,9 +98,14 @@ export function SearchPage(): React.JSX.Element {
     { value: '__all__', label: '全部来源' },
     ...(sources ?? []).map((s) => ({ value: s.id, label: s.name }))
   ]
+  const modeOptions: Array<{ value: SearchMode; label: string }> = [
+    { value: 'keyword', label: '关键词' },
+    { value: 'semantic', label: '语义' },
+    { value: 'hybrid', label: '混合' }
+  ]
 
   const hasResults = results && results.length > 0
-  const isEmpty = debouncedQuery.length > 0 && !isFetching && !hasResults
+  const isEmpty = debouncedQuery.length > 0 && !isFetching && !isError && !hasResults
 
   return (
     <div className="flex flex-col h-full">
@@ -102,6 +134,14 @@ export function SearchPage(): React.JSX.Element {
           size="large"
           className="w-44"
         />
+        <Select
+          id="search-mode"
+          value={mode}
+          onChange={(value: SearchMode) => setMode(value)}
+          options={modeOptions}
+          size="large"
+          className="w-32"
+        />
       </div>
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
@@ -119,6 +159,15 @@ export function SearchPage(): React.JSX.Element {
                 未找到与 <Text code>{debouncedQuery}</Text> 相关的文档
               </Text>
             }
+          />
+        )}
+
+        {!isFetching && isError && (
+          <Alert
+            type="warning"
+            showIcon
+            title={error instanceof Error ? error.message : '搜索失败'}
+            className="mb-4"
           />
         )}
 

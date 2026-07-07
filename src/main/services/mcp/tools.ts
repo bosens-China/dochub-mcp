@@ -2,6 +2,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import type { DocSource, DocTreeNode } from '@shared/types'
 import { sourceManager } from '../source/manager'
+import { loadConfig } from '../../config'
+import { getOllamaStatus } from '../ollama/client'
+import { getVectorIndexStatus } from '../indexer/vector-queue'
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false } as const
 
@@ -10,9 +13,10 @@ const INSTRUCTIONS = [
   '1. list_sources — see available doc sources',
   '2. list_source_tree — get the document tree for a source',
   '3. read_document — fetch full Markdown by path',
-  '4. search_documents — keyword search within a source (mode=keyword only in v1)',
+  '4. search_documents — keyword, semantic, or hybrid search within mirrored docs',
+  '5. get_ollama_status — check local Ollama configuration and model availability',
   '',
-  'Semantic / hybrid search requires Ollama (v2).'
+  'Semantic / hybrid search requires Ollama and a completed vector index.'
 ].join('\n')
 
 /** Resolve a source by its id OR display name (case-insensitive). */
@@ -28,6 +32,20 @@ async function resolveSource(sourceRef: string): Promise<DocSource> {
 
 function jsonContent(payload: unknown): { content: Array<{ type: 'text'; text: string }> } {
   return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] }
+}
+
+async function shouldFallbackToKeywordForVectorMode(): Promise<string | null> {
+  const config = await loadConfig()
+  if (!config.ollama.enabled) return 'Ollama is disabled; fell back to keyword search.'
+
+  const status = await getOllamaStatus(config.ollama)
+  if (!status.reachable) {
+    return `Ollama is unreachable; fell back to keyword search.${
+      status.error ? ` Error: ${status.error}` : ''
+    }`
+  }
+
+  return null
 }
 
 /** Render DocTreeNode[] as an indented text tree. */
@@ -139,28 +157,78 @@ export function buildMcpServer(): McpServer {
       inputSchema: {
         query: z.string().describe('搜索关键词'),
         source: z.string().optional().describe('限定源；省略则搜全部'),
-        mode: z.enum(['keyword', 'semantic', 'hybrid']).optional().describe('v1 仅 keyword'),
-        limit: z.number().int().min(1).max(50).optional().describe('默认 10，最大 50')
+        mode: z.enum(['keyword', 'semantic', 'hybrid']).optional().describe('默认 keyword'),
+        limit: z.number().int().min(1).max(50).optional().describe('默认 10，最大 50'),
+        rerank: z.boolean().optional().describe('覆盖全局 Rerank 开关'),
+        minScore: z.number().min(0).max(1).optional().describe('覆盖全局 Rerank 阈值')
       },
       annotations: READ_ONLY
     },
-    async ({ query, source, mode, limit }) => {
-      if (mode === 'semantic' || mode === 'hybrid') {
-        throw new Error(
-          'SEMANTIC_NOT_AVAILABLE: Semantic search requires Ollama (v2). Use mode=keyword.'
-        )
-      }
+    async ({ query, source, mode, limit, rerank, minScore }) => {
       const sourceId = source ? (await resolveSource(source)).id : null
+      if (mode === 'semantic' || mode === 'hybrid') {
+        const fallbackReason = await shouldFallbackToKeywordForVectorMode()
+        if (!fallbackReason) {
+          const max = limit ?? 10
+          const results = await sourceManager.searchDocuments(query, sourceId, mode, max, {
+            enabled: rerank,
+            minScore
+          })
+          return jsonContent({
+            mode,
+            rerank: rerank ?? undefined,
+            results: results.map((r) => ({
+              source: r.sourceName,
+              path: r.docPath,
+              title: r.title,
+              snippet: r.snippet,
+              score: r.score
+            }))
+          })
+        }
+        const max = limit ?? 10
+        const results = await sourceManager.searchDocuments(query, sourceId, 'keyword', max, {
+          enabled: rerank,
+          minScore
+        })
+        return jsonContent({
+          mode: 'keyword',
+          requestedMode: mode,
+          fallbackReason,
+          results: results.map((r) => ({
+            source: r.sourceName,
+            path: r.docPath,
+            title: r.title,
+            snippet: r.snippet
+          }))
+        })
+      }
       const max = limit ?? 10
-      const results = await sourceManager.searchDocuments(query, sourceId)
+      const results = await sourceManager.searchDocuments(query, sourceId, 'keyword', max, {
+        enabled: rerank,
+        minScore
+      })
       return jsonContent({
-        results: results.slice(0, max).map((r) => ({
+        results: results.map((r) => ({
           source: r.sourceName,
           path: r.docPath,
           title: r.title,
           snippet: r.snippet
         }))
       })
+    }
+  )
+
+  server.registerTool(
+    'get_ollama_status',
+    {
+      description: '查询本机 Ollama 配置、连通性和模型可用性。',
+      inputSchema: {},
+      annotations: READ_ONLY
+    },
+    async () => {
+      const config = await loadConfig()
+      return jsonContent(await getOllamaStatus(config.ollama, getVectorIndexStatus(config)))
     }
   )
 

@@ -14,6 +14,8 @@ import { createTray, setMainWindow } from './tray'
 import { loadConfig } from './config'
 import { setLoggerConfig, logger } from './services/logger/app-logger'
 import { startMcpServer, stopMcpServer } from './services/mcp/lifecycle'
+import { startSyncScheduler, stopSyncScheduler } from './services/scheduler/sync-scheduler'
+import { closeSpaBrowserPool } from './services/crawler/spa-fetcher'
 
 function devRendererOrigin(): string | null {
   if (!is.dev) return null
@@ -79,6 +81,7 @@ app.whenReady().then(async () => {
       /* startup error already logged; UI surfaces it via mcp:getStatus */
     })
   }
+  startSyncScheduler(config)
 
   createWindow()
   createTray()
@@ -97,5 +100,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  stopSyncScheduler()
+  void closeSpaBrowserPool()
   void stopMcpServer()
 })

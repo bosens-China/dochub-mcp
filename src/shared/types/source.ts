@@ -16,6 +16,15 @@ export const SourceScopeSchema = z.object({
   prefix: z.string()
 })
 
+export const ScheduleUnitSchema = z.enum(['hour', 'day', 'week', 'month'])
+
+export const SourceScheduleSchema = z.object({
+  enabled: z.boolean().default(false),
+  interval: z.number().int().min(1).default(1),
+  unit: ScheduleUnitSchema.default('day'),
+  nextRunAt: z.string().nullable().default(null)
+})
+
 export const SourceCrawlSchema = z.object({
   mode: CrawlModeSchema.default('ssr'),
   respectRobots: z.boolean().optional(),
@@ -63,15 +72,24 @@ export const SourceRecordSchema = z.object({
   }),
   crawl: SourceCrawlSchema,
   sync: SourceSyncSchema,
+  schedule: SourceScheduleSchema.prefault({}),
   createdAt: z.string(),
   updatedAt: z.string()
 })
 
 export type CrawlMode = z.infer<typeof CrawlModeSchema>
+export type ScheduleUnit = z.infer<typeof ScheduleUnitSchema>
 export type SyncStatus = z.infer<typeof SyncStatusSchema>
 export type SourceRecord = z.infer<typeof SourceRecordSchema>
 export type SourceCrawl = z.infer<typeof SourceCrawlSchema>
+export type SourceSchedule = z.infer<typeof SourceScheduleSchema>
 export type SourceSync = z.infer<typeof SourceSyncSchema>
+
+export interface SourceScheduleInput {
+  enabled: boolean
+  interval: number
+  unit: ScheduleUnit
+}
 
 export interface AddSourceInput {
   name: string
@@ -79,6 +97,7 @@ export interface AddSourceInput {
   crawlMode: CrawlMode
   maxPages?: number | null
   pathPrefix?: string
+  schedule?: SourceScheduleInput
 }
 
 export interface UpdateSourceInput {
@@ -93,6 +112,7 @@ export interface UpdateSourceInput {
   maxRetriesPerUrl?: number
   maxPages?: number | null
   pathPrefix?: string
+  schedule?: SourceScheduleInput
 }
 
 export interface SpaDetectionResult {
@@ -116,6 +136,8 @@ export interface DocSource {
   failedCount: number
   crawlMode: CrawlMode
   spineColor: string
+  scheduleEnabled: boolean
+  nextRunAt: string | null
   /** 上次 SSR 同步检测到疑似 SPA，UI 应提示切换 SPA 模式。 */
   needsSpa: boolean
 }
@@ -131,6 +153,7 @@ export interface SourceDetail extends DocSource {
   siteTitle?: string
   siteCharset?: string
   siteLang?: string
+  schedule: SourceSchedule
 }
 
 export interface DocTreeNode {
@@ -146,6 +169,8 @@ export interface DocContent {
   title: string
   body: string
 }
+
+export type SearchMode = 'keyword' | 'semantic' | 'hybrid'
 
 export type SyncPhase = 'preparing' | 'discovering' | 'crawling' | 'finalizing'
 
@@ -203,6 +228,35 @@ export interface AppSettings {
     userAgent: string
     defaultHeaders: Record<string, string>
   }
+  spaDetection: {
+    alwaysConfirm: boolean
+    ssrScoreMax: number
+    spaScoreMin: number
+    minBodyCharsForSsr: number
+    autoRetryMinMdChars: number
+  }
+  spaRender: {
+    timeoutMs: number
+    waitUntil: 'domcontentloaded' | 'load' | 'networkidle'
+    settleMs: number
+    maxPages: number
+  }
+  ollama: {
+    enabled: boolean
+    baseUrl: string
+    embeddingModel: string
+    embeddingConcurrency: number
+    llmModel: string
+    queryTranslation: {
+      enabled: boolean
+    }
+    rerank: {
+      enabled: boolean
+      model: string
+      minScore: number
+      topK: number
+    }
+  }
   ui: {
     closeToTray: boolean
     language: 'zh-CN' | 'en-US'
@@ -216,4 +270,6 @@ export interface SearchResult {
   docPath: string
   title: string
   snippet: string
+  score?: number
+  mode?: SearchMode
 }

@@ -13,6 +13,15 @@ export const CheckpointSchema = z.object({
       path: z.string()
     })
   ),
+  previousCompleted: z
+    .record(
+      z.string(),
+      z.object({
+        hash: z.string(),
+        path: z.string()
+      })
+    )
+    .default({}),
   failed: z.record(
     z.string(),
     z.object({

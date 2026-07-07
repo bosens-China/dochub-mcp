@@ -31,4 +31,31 @@ describe('htmlToMd', () => {
     expect(md).not.toContain('Documentation Index')
     expect(md).not.toContain('/llms.txt')
   })
+
+  it('uses readability fallback to drop layout noise without semantic main tags', () => {
+    const md = htmlToMd({
+      url: 'https://example.com/docs/page',
+      title: 'Readable article',
+      html: `
+        <html>
+          <body>
+            <aside>
+              <h2>Navigation</h2>
+              <p>Overview Install API Changelog Examples Reference Sidebar</p>
+            </aside>
+            <div class="content">
+              <h1>Readable Article</h1>
+              <p>DocHub mirrors documentation locally so AI editors can search and read precise source material without repeatedly crawling remote websites.</p>
+              <p>This paragraph gives the extractor enough real article text to select the content region and ignore surrounding layout furniture.</p>
+              <p>The resulting Markdown should preserve the useful prose while dropping sidebar navigation noise.</p>
+            </div>
+          </body>
+        </html>
+      `
+    })
+
+    expect(md).toContain('Readable Article')
+    expect(md).toContain('DocHub mirrors documentation locally')
+    expect(md).not.toContain('Overview Install API Changelog')
+  })
 })

@@ -11,6 +11,7 @@ import {
   type FetchOptions
 } from '../crawler/fetcher'
 import { extractLinksFromHtml } from '../discovery/index'
+import { shouldRetryWithSpa } from '../discovery/spa-detect'
 import { extractNavigationFromHtml, type DiscoveredNavigationItem } from '../discovery/navigation'
 import { htmlToMd, wrapDocumentMarkdown } from '../converter/html-to-md'
 import { appendSyncLog, saveCheckpoint } from '../sync/persistence'
@@ -53,6 +54,7 @@ export async function runConcurrentCrawl(ctx: CrawlContext): Promise<{
   const { config, record, crawl, checkpoint } = ctx
   const queue: string[] = [...checkpoint.pending]
   const completed = { ...checkpoint.completed }
+  const previousCompleted = { ...checkpoint.previousCompleted }
   const failed = { ...checkpoint.failed }
   const navigation = [...checkpoint.navigation]
   const navigationUrls = new Set(navigation.map((item) => item.url))
@@ -132,7 +134,7 @@ export async function runConcurrentCrawl(ctx: CrawlContext): Promise<{
     while (attempts < crawl.maxRetriesPerUrl && !success) {
       attempts++
       try {
-        const result = await fetchUrl(url, { ...ctx.fetchOpts, robotsTxt: ctx.robotsTxt })
+        let result = await fetchUrl(url, { ...ctx.fetchOpts, robotsTxt: ctx.robotsTxt })
         if (result.status === 429) {
           const retryAfter = Number(result.headers['retry-after'] ?? 5)
           await sleep(retryAfter * 1000)
@@ -140,11 +142,24 @@ export async function runConcurrentCrawl(ctx: CrawlContext): Promise<{
         }
         if (result.status >= 400) throw new Error(`HTTP ${result.status}`)
 
+        let title = load(result.body)('title').first().text().trim() || url
+        let mdBody = htmlToMd({ html: result.body, url: result.finalUrl, title })
+        if (
+          ctx.fetchOpts.crawlMode === 'auto' &&
+          shouldRetryWithSpa(result.body, mdBody.length, config.spaDetection)
+        ) {
+          result = await fetchUrl(url, {
+            ...ctx.fetchOpts,
+            robotsTxt: ctx.robotsTxt,
+            crawlMode: 'spa'
+          })
+          if (result.status >= 400) throw new Error(`HTTP ${result.status}`)
+          title = load(result.body)('title').first().text().trim() || url
+          mdBody = htmlToMd({ html: result.body, url: result.finalUrl, title })
+        }
         const docPath = urlToDocPath(result.finalUrl, record.scope.prefix)
-        const title = load(result.body)('title').first().text().trim() || url
-        const mdBody = htmlToMd({ html: result.body, url: result.finalUrl, title })
         const hash = contentHash(mdBody)
-        const prev = completed[result.finalUrl]
+        const prev = completed[result.finalUrl] ?? previousCompleted[result.finalUrl]
         mergeNavigation(
           extractNavigationFromHtml(result.body, result.finalUrl, record.scope.prefix)
         )

@@ -47,6 +47,29 @@ describe('listDocTree titles', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
+  it('rejects document paths outside the docs directory', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'dochub-path-guard-'))
+    const config = parseAppConfig({ dataDir: dir })
+    await ensureDataDirs(config)
+    await saveConfig(config)
+
+    const record = createSourceRecord({
+      name: 'Path Guard',
+      seedUrl: 'https://example.com/docs/',
+      crawlMode: 'ssr'
+    })
+    await writeSourceRecord(record, config)
+
+    await expect(readDocContent(record.id, '../_source.json', config)).rejects.toThrow(
+      '无效的文件路径'
+    )
+    await expect(readDocContent(record.id, 'guide\\index.md', config)).rejects.toThrow(
+      '无效的文件路径'
+    )
+
+    await rm(dir, { recursive: true, force: true })
+  })
+
   it('uses stored navigation metadata to mirror the original sidebar hierarchy', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'dochub-nav-tree-'))
     const config = parseAppConfig({ dataDir: dir })

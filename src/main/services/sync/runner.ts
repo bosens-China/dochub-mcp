@@ -1,6 +1,8 @@
-import { rm } from 'fs/promises'
+import { readFile, rm } from 'fs/promises'
 import { existsSync } from 'fs'
 import type { AppConfig } from '@shared/types/config'
+import { SourceMetaSchema } from '@shared/types/source-meta'
+import type { Checkpoint } from '@shared/types/checkpoint'
 import type { SyncProgress } from '@shared/types'
 import { discoverSeedUrls } from '../discovery/index'
 import { fetchRobotsTxt, type FetchOptions } from '../crawler/fetcher'
@@ -11,13 +13,15 @@ import {
   saveCheckpoint
 } from '../sync/persistence'
 import { getCheckpointPath } from '../../config/paths'
-import { readSourceRecord, writeSourceRecord } from '../source/store'
+import { readSourceRecord, sourceDocsDir, sourceMetaPath, writeSourceRecord } from '../source/store'
 import { runConcurrentCrawl } from '../sync/orchestrator'
 import { finalizeSourceDocuments } from '../sync/finalize'
 import { detectSpa as runSpaDetect } from '../discovery/spa-detect'
 import { fetchSiteMeta } from '../discovery/site-meta'
 import { buildTreeTxt, deleteRemovedDocs } from './doc-files'
 import { logger } from '../logger/app-logger'
+import { parseDocFile } from '../converter/doc-frontmatter'
+import { join } from 'path'
 
 const activeSyncs = new Map<string, SyncProgress>()
 const syncLocks = new Set<string>()
@@ -89,6 +93,41 @@ function patchProgress(
   })
 }
 
+function stripSha256Prefix(hash: string): string {
+  return hash.startsWith('sha256:') ? hash.slice('sha256:'.length) : hash
+}
+
+async function readPreviousCompleted(
+  sourceId: string,
+  config: AppConfig
+): Promise<Checkpoint['previousCompleted']> {
+  const metaPath = sourceMetaPath(sourceId, config)
+  if (!existsSync(metaPath)) return {}
+
+  try {
+    const raw = JSON.parse(await readFile(metaPath, 'utf8')) as unknown
+    const meta = SourceMetaSchema.parse(raw)
+    const previous: Checkpoint['previousCompleted'] = {}
+
+    for (const doc of meta.documents) {
+      let hash = doc.contentHash
+      const fullPath = join(sourceDocsDir(sourceId, config), doc.path.replace(/^docs\//, ''))
+      if (existsSync(fullPath)) {
+        const parsed = parseDocFile(await readFile(fullPath, 'utf8'))
+        hash = parsed?.frontmatter.sourceContentHash ?? parsed?.frontmatter.contentHash ?? hash
+      }
+      previous[doc.url] = {
+        hash: stripSha256Prefix(hash),
+        path: doc.path
+      }
+    }
+
+    return previous
+  } catch {
+    return {}
+  }
+}
+
 export async function runSourceSync(sourceId: string, config: AppConfig): Promise<void> {
   if (syncLocks.has(sourceId)) {
     throw new Error('该源正在同步中')
@@ -135,7 +174,7 @@ export async function runSourceSync(sourceId: string, config: AppConfig): Promis
   }
 
   try {
-    let effectiveCrawlMode = record.crawl.mode
+    const effectiveCrawlMode = record.crawl.mode
     let needsSpa = false
     // 对 auto / ssr 模式做首屏 SPA 检测：auto 用于选定模式，ssr 用于给出「疑似 SPA」警告。
     if (effectiveCrawlMode !== 'spa') {
@@ -143,12 +182,13 @@ export async function runSourceSync(sourceId: string, config: AppConfig): Promis
         phase: 'preparing',
         message: '正在检测页面类型…'
       })
-      const detection = await runSpaDetect(record.seedUrl, crawl, record.crawl.customHeaders)
-      if (record.crawl.mode === 'auto') {
-        effectiveCrawlMode =
-          detection.recommendedMode === 'auto' ? 'ssr' : detection.recommendedMode
-      }
-      if (effectiveCrawlMode === 'ssr' && detection.confidence === 'likely_spa') {
+      const detection = await runSpaDetect(
+        record.seedUrl,
+        crawl,
+        record.crawl.customHeaders,
+        config.spaDetection
+      )
+      if (detection.confidence === 'likely_spa') {
         needsSpa = true
         logger.warn('sync', `「${record.name}」疑似 SPA 站点，SSR 抓取内容可能不完整`, {
           seedUrl: record.seedUrl,
@@ -161,7 +201,8 @@ export async function runSourceSync(sourceId: string, config: AppConfig): Promis
     const fetchOpts: FetchOptions = {
       crawl,
       customHeaders: record.crawl.customHeaders,
-      crawlMode: effectiveCrawlMode
+      crawlMode: effectiveCrawlMode,
+      spaRender: config.spaRender
     }
 
     if (crawl.respectRobots) {
@@ -189,9 +230,14 @@ export async function runSourceSync(sourceId: string, config: AppConfig): Promis
         record.crawl.customHeaders,
         (message) => {
           patchProgress(sourceId, { phase: 'discovering', message })
-        }
+        },
+        config.ollama
       )
-      checkpoint = createCheckpoint(sourceId, seedUrls)
+      checkpoint = createCheckpoint(
+        sourceId,
+        seedUrls,
+        await readPreviousCompleted(sourceId, config)
+      )
 
       // 抓取站点元信息（title / charset / lang），立即持久化——后续 finalize 会重新读取 record。
       const siteMeta = await fetchSiteMeta(record.seedUrl, crawl, record.crawl.customHeaders)
@@ -256,6 +302,32 @@ export async function runSourceSync(sourceId: string, config: AppConfig): Promis
       patchProgress(sourceId, {
         phase: 'crawling',
         message: '已暂停，同步进度已保存',
+        total: Object.keys(completed).length,
+        completed: Object.keys(completed).length,
+        failed: Object.keys(failed).length,
+        currentUrl: null
+      })
+      return
+    }
+
+    if (status !== 'completed') {
+      record = (await readSourceRecord(sourceId, config)) ?? record
+      record = {
+        ...record,
+        sync: {
+          ...record.sync,
+          status,
+          lastSyncDurationMs: Date.now() - started,
+          pageCount: Math.max(record.sync.pageCount, Object.keys(completed).length),
+          failedUrlCount: Object.keys(failed).length,
+          needsSpa
+        },
+        updatedAt: new Date().toISOString()
+      }
+      await writeSourceRecord(record, config)
+      patchProgress(sourceId, {
+        phase: 'crawling',
+        message: status === 'domain_halted' ? '已熔断，同步进度已保存' : '同步未完成，进度已保存',
         total: Object.keys(completed).length,
         completed: Object.keys(completed).length,
         failed: Object.keys(failed).length,

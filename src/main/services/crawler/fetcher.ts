@@ -1,6 +1,6 @@
 import { fetch as undiciFetch } from 'undici'
 import robotsParser from 'robots-parser'
-import type { CrawlConfig } from '@shared/types/config'
+import { parseAppConfig, type CrawlConfig, type SpaRenderConfig } from '@shared/types/config'
 import type { CrawlMode } from '@shared/types'
 import { fetchSpaHtml } from './spa-fetcher'
 import { cachedText } from '../discovery/domain-cache'
@@ -18,6 +18,7 @@ export interface FetchOptions {
   customHeaders?: Record<string, string>
   robotsTxt?: string | null
   crawlMode?: CrawlMode
+  spaRender?: SpaRenderConfig
 }
 
 function headerRecord(headers: {
@@ -45,7 +46,7 @@ export async function fetchUrl(url: string, options: FetchOptions): Promise<Fetc
     const userAgent =
       Object.entries(headers).find(([key]) => key.toLowerCase() === 'user-agent')?.[1] ??
       crawl.userAgent
-    return fetchSpaHtml(url, crawl.requestTimeoutMs, userAgent, headers)
+    return fetchSpaHtml(url, options.spaRender ?? parseAppConfig({}).spaRender, userAgent, headers)
   }
 
   const controller = new AbortController()

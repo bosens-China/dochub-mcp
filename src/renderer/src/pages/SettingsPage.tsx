@@ -15,6 +15,7 @@ import {
 import { ApiOutlined, CloudDownloadOutlined, DesktopOutlined } from '@ant-design/icons'
 import { MCP_DEFAULT_PORT } from '@shared/constants/mcp'
 import type { AppSettings } from '@shared/types'
+import { OllamaSettingsTab } from '@renderer/components/settings/OllamaSettingsTab'
 import {
   useMcpStatus,
   useSettings,
@@ -154,28 +155,82 @@ function CrawlTab({
   settings: AppSettings
   onSave: (values: Partial<AppSettings>) => void
 }): React.JSX.Element {
-  const [form] = Form.useForm<AppSettings['crawl']>()
+  type CrawlFormValues = AppSettings['crawl'] & {
+    defaultHeadersText: string
+    autoRetryMinMdChars: number
+    renderTimeoutMs: number
+    renderWaitUntil: AppSettings['spaRender']['waitUntil']
+    renderSettleMs: number
+    renderMaxPages: number
+  }
+
+  const [form] = Form.useForm<CrawlFormValues>()
 
   useEffect(() => {
-    form.setFieldsValue(settings.crawl)
-  }, [form, settings.crawl])
+    form.setFieldsValue({
+      ...settings.crawl,
+      autoRetryMinMdChars: settings.spaDetection.autoRetryMinMdChars,
+      renderTimeoutMs: settings.spaRender.timeoutMs,
+      renderWaitUntil: settings.spaRender.waitUntil,
+      renderSettleMs: settings.spaRender.settleMs,
+      renderMaxPages: settings.spaRender.maxPages,
+      defaultHeadersText: JSON.stringify(settings.crawl.defaultHeaders, null, 2)
+    })
+  }, [form, settings.crawl, settings.spaDetection, settings.spaRender])
+
+  const parseHeaders = (raw: string): Record<string, string> => {
+    if (!raw.trim()) return {}
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Headers 必须是 JSON 对象')
+    }
+    const headers: Record<string, string> = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value !== 'string') {
+        throw new Error('Header 值必须是字符串')
+      }
+      headers[key] = value
+    }
+    return headers
+  }
 
   return (
     <Form
       form={form}
       layout="vertical"
       className="max-w-lg"
-      onFinish={(values) =>
+      onFinish={(values) => {
+        const {
+          defaultHeadersText,
+          autoRetryMinMdChars,
+          renderTimeoutMs,
+          renderWaitUntil,
+          renderSettleMs,
+          renderMaxPages,
+          ...crawlValues
+        } = values
         onSave({
           crawl: {
-            ...values,
+            ...crawlValues,
+            defaultHeaders: parseHeaders(defaultHeadersText),
             rateLimitMode: values.rateLimitMode,
             rateLimitFixedMs: values.rateLimitFixedMs,
             rateLimitRandomMinMs: values.rateLimitRandomMinMs,
             rateLimitRandomMaxMs: values.rateLimitRandomMaxMs
+          },
+          spaDetection: {
+            ...settings.spaDetection,
+            autoRetryMinMdChars
+          },
+          spaRender: {
+            ...settings.spaRender,
+            timeoutMs: renderTimeoutMs,
+            waitUntil: renderWaitUntil,
+            settleMs: renderSettleMs,
+            maxPages: renderMaxPages
           }
         })
-      }
+      }}
     >
       <Form.Item name="respectRobots" label="遵守 robots.txt" valuePropName="checked">
         <Switch />
@@ -207,8 +262,46 @@ function CrawlTab({
       <Form.Item name="requestTimeoutMs" label="请求超时 (ms)">
         <InputNumber className="w-full" step={1000} />
       </Form.Item>
+      <Form.Item name="autoRetryMinMdChars" label="自动重抓阈值 (字符)">
+        <InputNumber className="w-full" min={0} step={50} />
+      </Form.Item>
+      <Form.Item name="renderTimeoutMs" label="浏览器渲染超时 (ms)">
+        <InputNumber className="w-full" min={1000} step={1000} />
+      </Form.Item>
+      <Form.Item name="renderWaitUntil" label="浏览器等待条件">
+        <Select
+          options={[
+            { value: 'domcontentloaded', label: 'domcontentloaded' },
+            { value: 'load', label: 'load' },
+            { value: 'networkidle', label: 'networkidle' }
+          ]}
+        />
+      </Form.Item>
+      <Form.Item name="renderSettleMs" label="渲染后额外等待 (ms)">
+        <InputNumber className="w-full" min={0} step={100} />
+      </Form.Item>
+      <Form.Item name="renderMaxPages" label="浏览器页面池大小">
+        <InputNumber className="w-full" min={1} max={10} />
+      </Form.Item>
       <Form.Item name="userAgent" label="User-Agent">
         <Input />
+      </Form.Item>
+      <Form.Item
+        name="defaultHeadersText"
+        label="默认 Headers"
+        rules={[
+          {
+            validator: async (_, value: string | undefined) => {
+              try {
+                parseHeaders(value ?? '')
+              } catch (err) {
+                throw new Error(err instanceof Error ? err.message : 'Headers 格式无效')
+              }
+            }
+          }
+        ]}
+      >
+        <Input.TextArea rows={5} spellCheck={false} />
       </Form.Item>
       <Button type="primary" htmlType="submit" icon={<CloudDownloadOutlined />}>
         保存
@@ -246,6 +339,11 @@ export function SettingsPage(): React.JSX.Element {
       key: 'crawl',
       label: '爬取',
       children: <CrawlTab settings={settings} onSave={(v) => void handleSave(v)} />
+    },
+    {
+      key: 'ollama',
+      label: 'Ollama',
+      children: <OllamaSettingsTab settings={settings} onSave={(v) => void handleSave(v)} />
     }
   ]
 

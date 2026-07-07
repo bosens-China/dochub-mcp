@@ -1,6 +1,6 @@
 import { existsSync } from 'fs'
 import { readFile, readdir, rm, writeFile } from 'fs/promises'
-import { join } from 'path'
+import { isAbsolute, join, relative, resolve } from 'path'
 import type { DocTreeNode } from '@shared/types'
 import type { AppConfig } from '@shared/types/config'
 import {
@@ -10,6 +10,8 @@ import {
 } from '@shared/types/source-meta'
 import { extractDocBody, extractDocTitle } from '../converter/doc-frontmatter'
 import { removeDocumentIndex } from '../indexer/fts'
+import { removeDocumentVectors } from '../indexer/vector'
+import { cancelDocumentVectorIndex } from '../indexer/vector-queue'
 import { readSourceRecord, sourceDocsDir, sourceMetaPath, sourceTreePath } from '../source/store'
 import { appendSyncLog } from './persistence'
 
@@ -92,6 +94,30 @@ function isReadableNavItem(item: SourceMetaNavigationItem, docsRoot: string): bo
   return existsSync(fullPath)
 }
 
+function resolveDocFilePath(
+  docsRoot: string,
+  docPath: string
+): { fullPath: string; docKey: string } {
+  if (docPath.includes('\0') || docPath.includes('\\')) {
+    throw new Error('无效的文件路径')
+  }
+
+  const docKey = docPath.startsWith('docs/') ? docPath : `docs/${docPath}`
+  if (!docKey.endsWith('.md')) {
+    throw new Error('无效的文件路径')
+  }
+
+  const relativePath = docKey.replace(/^docs\//, '')
+  const root = resolve(docsRoot)
+  const fullPath = resolve(root, relativePath)
+  const relToRoot = relative(root, fullPath)
+  if (relToRoot.startsWith('..') || isAbsolute(relToRoot)) {
+    throw new Error('无效的文件路径')
+  }
+
+  return { fullPath, docKey }
+}
+
 export async function listNavigationDocTree(
   sourceId: string,
   config: AppConfig
@@ -153,16 +179,16 @@ export async function readDocContent(
   docPath: string,
   config: AppConfig
 ): Promise<{ path: string; title: string; body: string }> {
-  const relativePath = docPath.replace(/^docs\//, '')
-  const fullPath = join(sourceDocsDir(sourceId, config), relativePath)
+  const { fullPath, docKey } = resolveDocFilePath(sourceDocsDir(sourceId, config), docPath)
   if (!existsSync(fullPath)) {
     throw new Error('文档不存在')
   }
   const raw = await readFile(fullPath, 'utf8')
+  const relativePath = docKey.replace(/^docs\//, '')
   const fallback = relativePath.split('/').pop()?.replace(/\.md$/, '') ?? docPath
   const title = extractDocTitle(raw, fallback)
   const body = extractDocBody(raw)
-  return { path: docPath, title, body }
+  return { path: docKey, title, body }
 }
 
 /** 返回文档正文 */
@@ -193,6 +219,12 @@ export async function deleteRemovedDocs(
       } else if (entry.name.endsWith('.md') && !currentPaths.has(docKey)) {
         await rm(join(dir, entry.name))
         removeDocumentIndex(sourceId, docKey, config)
+        try {
+          cancelDocumentVectorIndex(sourceId, docKey)
+          removeDocumentVectors(sourceId, docKey, config)
+        } catch {
+          // Vector index cleanup is best-effort; FTS and files remain canonical.
+        }
         await appendSyncLog(
           {
             ts: new Date().toISOString(),

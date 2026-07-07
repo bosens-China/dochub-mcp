@@ -9,7 +9,9 @@ import type {
   DocSource,
   DocTreeNode,
   McpStatus,
+  OllamaStatus,
   SearchResult,
+  SearchMode,
   CrawlMode,
   SyncLogEntry,
   SyncProgress
@@ -34,9 +36,17 @@ export interface DocHubAPI {
   getAppLogs(): Promise<AppLogEntry[]>
   getSettings(): Promise<AppSettings>
   updateSettings(partial: Partial<AppSettings>): Promise<AppSettings>
-  searchDocuments(query: string, sourceId: string | null): Promise<SearchResult[]>
+  searchDocuments(
+    query: string,
+    sourceId: string | null,
+    mode?: SearchMode,
+    limit?: number,
+    rerank?: boolean,
+    minScore?: number
+  ): Promise<SearchResult[]>
   testMcpConnection(host: string, port: number): Promise<boolean>
   getMcpStatus(): Promise<McpStatus>
+  getOllamaStatus(): Promise<OllamaStatus>
   /** Dev build only — subscribe to ⌘⇧D / Ctrl+Shift+D panel toggle */
   onDeveloperPanelToggle(listener: () => void): () => void
 }

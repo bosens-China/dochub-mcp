@@ -5,6 +5,7 @@ import type { CrawlMode, UpdateSourceInput } from '@shared/types'
 import { useSource, useUpdateSource } from '@renderer/hooks/use-app-data'
 import { ScopeDepthInput } from '@renderer/components/ScopeDepthInput'
 import { CrawlPreviewModal } from '@renderer/components/CrawlPreviewModal'
+import { SourceScheduleFields } from '@renderer/components/SourceScheduleFields'
 import { CRAWL_MODE_SELECT_OPTIONS } from '@renderer/lib/crawl-mode'
 
 interface SourceEditModalProps {
@@ -27,6 +28,7 @@ export function SourceEditModal({
       customHeaders: Record<string, string>
       maxPages?: number | null
       pathPrefix?: string
+      schedule: UpdateSourceInput['schedule']
     }
   >()
   const seedUrlValue = Form.useWatch('seedUrl', form)
@@ -45,6 +47,11 @@ export function SourceEditModal({
         maxRetriesPerUrl: source.maxRetriesPerUrl,
         maxPages: source.maxPages,
         pathPrefix: source.pathPrefix,
+        schedule: {
+          enabled: source.schedule.enabled,
+          interval: source.schedule.interval,
+          unit: source.schedule.unit
+        },
         excludeText: source.excludePatterns.join('\n'),
         customHeaders: source.customHeaders
       })
@@ -69,6 +76,7 @@ export function SourceEditModal({
       maxRetriesPerUrl: values.maxRetriesPerUrl,
       maxPages: values.maxPages ?? null,
       pathPrefix: values.pathPrefix,
+      schedule: values.schedule,
       excludePatterns,
       customHeaders: values.customHeaders
     })
@@ -158,6 +166,7 @@ export function SourceEditModal({
           <Form.Item name="maxPages" label="最大抓取页数">
             <InputNumber min={1} className="w-full" placeholder="留空表示不限制" />
           </Form.Item>
+          <SourceScheduleFields />
           <Form.Item
             name="excludeText"
             label="排除路径（每行一条，支持 * 通配）"

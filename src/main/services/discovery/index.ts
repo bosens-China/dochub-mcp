@@ -1,8 +1,26 @@
 import { load } from 'cheerio'
 import picomatch from 'picomatch'
 import type { CrawlConfig } from '@shared/types/config'
+import type { OllamaConfig } from '@shared/types'
+import { z } from 'zod'
 import { isInScope } from '../source/util'
 import { cachedText } from './domain-cache'
+import { chatWithOllama } from '../ollama/client'
+
+const StructuredLlmsItemSchema = z.object({
+  url: z.string(),
+  title: z.string().optional(),
+  section: z.string().optional()
+})
+
+const StructuredLlmsResponseSchema = z
+  .union([
+    z.array(StructuredLlmsItemSchema),
+    z.object({
+      urls: z.array(StructuredLlmsItemSchema)
+    })
+  ])
+  .transform((value) => (Array.isArray(value) ? value : value.urls))
 
 /** Fetch a URL's text (or null on non-2xx / error). Never throws. */
 async function fetchTextOrNull(
@@ -79,6 +97,40 @@ export function parseLlmsTxt(raw: string, scopePrefix: string): string[] {
   return filterUrls(urls, scopePrefix)
 }
 
+async function parseLlmsTxtWithOllama(
+  raw: string,
+  scopePrefix: string,
+  ollama?: OllamaConfig,
+  onProgress?: DiscoverProgressCallback
+): Promise<string[]> {
+  if (!ollama?.enabled || !ollama.llmModel.trim()) return []
+
+  try {
+    onProgress?.('llms.txt 无法直接解析，正在尝试 Ollama 结构化…')
+    const content = await chatWithOllama(
+      ollama,
+      [
+        {
+          role: 'system',
+          content:
+            'Extract documentation URLs from the user text. Return JSON only: [{"url":"https://example.com/docs/a","title":"A","section":"Guide"}].'
+        },
+        { role: 'user', content: raw.slice(0, 20_000) }
+      ],
+      { format: 'json' }
+    )
+    const parsed = JSON.parse(content) as unknown
+    const items = StructuredLlmsResponseSchema.parse(parsed)
+    return filterUrls(
+      items.map((item) => item.url),
+      scopePrefix
+    )
+  } catch {
+    onProgress?.('Ollama 未能结构化 llms.txt，已跳过')
+    return []
+  }
+}
+
 export function parseSitemapXml(xml: string, scopePrefix: string): string[] {
   const $ = load(xml, { xmlMode: true })
   const urls: string[] = []
@@ -91,12 +143,17 @@ export function parseSitemapXml(xml: string, scopePrefix: string): string[] {
 
 export function extractLinksFromHtml(html: string, pageUrl: string, scopePrefix: string): string[] {
   const $ = load(html)
+  const seen = new Set<string>()
   const links: string[] = []
   $('a[href]').each((_, el) => {
     const href = $(el).attr('href')
-    if (href) links.push(href)
+    if (!href) return
+    const normalized = normalizeUrl(href, pageUrl)
+    if (!normalized || seen.has(normalized) || !isInScope(normalized, scopePrefix)) return
+    seen.add(normalized)
+    links.push(normalized)
   })
-  return filterUrls(links, pageUrl, []).filter((u) => isInScope(u, scopePrefix))
+  return links
 }
 
 export type DiscoverProgressCallback = (message: string) => void
@@ -106,7 +163,8 @@ export async function discoverSeedUrls(
   scopePrefix: string,
   crawl: CrawlConfig,
   customHeaders: Record<string, string>,
-  onProgress?: DiscoverProgressCallback
+  onProgress?: DiscoverProgressCallback,
+  ollama?: OllamaConfig
 ): Promise<string[]> {
   const domain = new URL(seedUrl).origin
   const candidates = new Set<string>([seedUrl])
@@ -120,7 +178,10 @@ export async function discoverSeedUrls(
       fetchTextOrNull(`${domain}${path}`, crawl, customHeaders)
     )
     if (text !== null) {
-      const found = parseLlmsTxt(text, scopePrefix)
+      let found = parseLlmsTxt(text, scopePrefix)
+      if (found.length === 0) {
+        found = await parseLlmsTxtWithOllama(text, scopePrefix, ollama, onProgress)
+      }
       for (const u of found) candidates.add(u)
       if (found.length > 0) {
         onProgress?.(`从 ${path} 发现 ${found.length} 个 URL`)

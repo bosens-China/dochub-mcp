@@ -2,6 +2,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   PauseOutlined,
+  CalendarOutlined,
   LinkOutlined,
   ReadOutlined,
   SyncOutlined,
@@ -111,7 +112,7 @@ export function SourceCard({ source, onEdit }: SourceCardProps): React.JSX.Eleme
           </div>
         )}
 
-        <dl className="grid grid-cols-3 gap-3 mt-4 mb-0 text-sm">
+        <dl className="grid grid-cols-4 gap-3 mt-4 mb-0 text-sm">
           <div>
             <dt className="archive-label m-0">页面</dt>
             <dd className="font-mono text-archive-ink m-0 mt-0.5">
@@ -139,6 +140,16 @@ export function SourceCard({ source, onEdit }: SourceCardProps): React.JSX.Eleme
               {formatRelativeTime(source.lastSyncedAt)}
             </dd>
           </div>
+          <div>
+            <dt className="archive-label m-0">下次同步</dt>
+            <dd className="text-archive-ink m-0 mt-0.5 text-xs">
+              {source.scheduleEnabled
+                ? source.nextRunAt
+                  ? formatRelativeTime(source.nextRunAt)
+                  : '计算中'
+                : '关闭'}
+            </dd>
+          </div>
         </dl>
 
         <div className="flex items-center gap-2 mt-4 pt-3 border-t border-archive-line">
@@ -147,6 +158,13 @@ export function SourceCard({ source, onEdit }: SourceCardProps): React.JSX.Eleme
               {crawlModeName(source.crawlMode)}
             </Tag>
           </Tooltip>
+          {source.scheduleEnabled && (
+            <Tooltip title="已开启定时同步">
+              <Tag color="blue" icon={<CalendarOutlined />} className="m-0 text-xs">
+                定时
+              </Tag>
+            </Tooltip>
+          )}
           {source.needsSpa && source.crawlMode !== 'spa' && (
             <Tooltip title="首屏内容过少，疑似 SPA 站点。SSR 抓取可能不完整，建议在「编辑」中切换为 SPA 模式后重新同步。">
               <Tag color="warning" icon={<WarningOutlined />} className="m-0 text-xs">

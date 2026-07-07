@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import { mkdir } from 'fs/promises'
+import { mkdirSync } from 'fs'
 import { dirname } from 'path'
 import { existsSync } from 'fs'
 import type { AppConfig } from '@shared/types/config'
@@ -43,7 +43,7 @@ function getDb(config: AppConfig): Database.Database {
   }
 
   if (!existsSync(dirname(path))) {
-    void mkdir(dirname(path), { recursive: true })
+    mkdirSync(dirname(path), { recursive: true })
   }
 
   const newDb = new Database(path)
@@ -100,22 +100,39 @@ export function searchKeyword(
   sourceId: string | null,
   config: AppConfig,
   limit = 20
-): Array<{ sourceId: string; docPath: string; title: string; snippet: string }> {
+): Array<{ sourceId: string; docPath: string; title: string; snippet: string; rank: number }> {
   const database = getDb(config)
   const sql = sourceId
-    ? `SELECT source_id, doc_path, title, snippet(documents_fts, 4, '<b>', '</b>', '…', 32) AS snippet
-       FROM documents_fts WHERE documents_fts MATCH ? AND source_id = ? LIMIT ?`
-    : `SELECT source_id, doc_path, title, snippet(documents_fts, 4, '<b>', '</b>', '…', 32) AS snippet
-       FROM documents_fts WHERE documents_fts MATCH ? LIMIT ?`
+    ? `SELECT
+         source_id,
+         doc_path,
+         title,
+         snippet(documents_fts, 4, '<b>', '</b>', '…', 32) AS snippet,
+         bm25(documents_fts) AS score
+       FROM documents_fts
+       WHERE documents_fts MATCH ? AND source_id = ?
+       ORDER BY score
+       LIMIT ?`
+    : `SELECT
+         source_id,
+         doc_path,
+         title,
+         snippet(documents_fts, 4, '<b>', '</b>', '…', 32) AS snippet,
+         bm25(documents_fts) AS score
+       FROM documents_fts
+       WHERE documents_fts MATCH ?
+       ORDER BY score
+       LIMIT ?`
   const stmt = database.prepare(sql)
   const rows = sourceId
     ? (stmt.all(query, sourceId, limit) as Array<Record<string, string>>)
     : (stmt.all(query, limit) as Array<Record<string, string>>)
-  return rows.map((r) => ({
+  return rows.map((r, index) => ({
     sourceId: r.source_id,
     docPath: r.doc_path,
     title: r.title,
-    snippet: r.snippet
+    snippet: r.snippet,
+    rank: index + 1
   }))
 }
 

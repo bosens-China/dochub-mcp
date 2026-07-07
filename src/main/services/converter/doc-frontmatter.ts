@@ -3,7 +3,9 @@ export interface DocFrontmatter {
   originalUrl: string
   title: string
   contentHash: string
+  sourceContentHash?: string
   syncedAt: string
+  language?: string
 }
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/
@@ -26,25 +28,38 @@ export function parseDocFile(raw: string): { frontmatter: DocFrontmatter; body: 
     if (parsed) fields[parsed.key] = parsed.value
   }
 
-  const { sourceUrl, originalUrl, title, contentHash, syncedAt } = fields
+  const { sourceUrl, originalUrl, title, contentHash, sourceContentHash, syncedAt, language } =
+    fields
   if (!sourceUrl || !originalUrl || !title || !contentHash || !syncedAt) {
     return null
   }
 
   return {
-    frontmatter: { sourceUrl, originalUrl, title, contentHash, syncedAt },
+    frontmatter: {
+      sourceUrl,
+      originalUrl,
+      title,
+      contentHash,
+      sourceContentHash,
+      syncedAt,
+      language
+    },
     body
   }
 }
 
 export function serializeDocFile(frontmatter: DocFrontmatter, body: string): string {
   const safeTitle = frontmatter.title.replace(/\n/g, ' ')
+  const sourceContentHash = frontmatter.sourceContentHash
+    ? `sourceContentHash: ${frontmatter.sourceContentHash}\n`
+    : ''
+  const language = frontmatter.language ? `language: ${frontmatter.language}\n` : ''
   return `---
 sourceUrl: ${frontmatter.sourceUrl}
 originalUrl: ${frontmatter.originalUrl}
 title: ${safeTitle}
 contentHash: ${frontmatter.contentHash}
-syncedAt: ${frontmatter.syncedAt}
+${sourceContentHash}${language}syncedAt: ${frontmatter.syncedAt}
 ---
 
 ${body.trim()}

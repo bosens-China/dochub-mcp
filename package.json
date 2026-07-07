@@ -16,7 +16,7 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "node scripts/install-playwright-chromium.mjs && electron-builder install-app-deps",
     "prepare": "husky",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
@@ -31,6 +31,7 @@
     "@fontsource/literata": "^5.2.8",
     "@mdream/js": "^1.4.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@mozilla/readability": "^0.6.0",
     "@tanstack/react-query": "^5.101.1",
     "@tanstack/react-router": "^1.170.16",
     "ahooks": "^3.9.7",
@@ -39,10 +40,13 @@
     "cheerio": "^1.2.0",
     "dayjs": "^1.11.21",
     "electron-updater": "^6.3.9",
+    "jsdom": "^29.1.1",
     "picomatch": "^4.0.4",
+    "playwright": "1.61.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "robots-parser": "^3.0.1",
+    "sqlite-vec": "0.1.9",
     "turndown": "^7.2.4",
     "undici": "^8.5.0",
     "zod": "^4.4.3"
@@ -79,7 +83,6 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "highlight.js": "^11.11.1",
     "husky": "^9.1.7",
-    "jsdom": "^29.1.1",
     "lint-staged": "^17.0.8",
     "prettier": "^3.7.4",
     "react": "^19.2.1",
@@ -89,14 +92,6 @@
     "unocss": "^66.7.3",
     "vite": "^7.2.6",
     "vitest": "^4.1.9"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "electron",
-      "electron-winstaller",
-      "esbuild"
-    ]
   },
   "lint-staged": {
     "*.{ts,tsx}": [

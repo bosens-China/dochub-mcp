@@ -18,6 +18,8 @@ export const queryKeys = {
   syncLogs: ['syncLogs'] as const,
   appLogs: ['appLogs'] as const,
   mcpStatus: ['mcpStatus'] as const,
+  ollamaStatus: ['ollamaStatus'] as const,
   settings: ['settings'] as const,
-  searchResults: (query: string, sourceId: string | null) => ['search', query, sourceId] as const
+  searchResults: (query: string, sourceId: string | null, mode: string) =>
+    ['search', query, sourceId, mode] as const
 }

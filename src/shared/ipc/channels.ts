@@ -31,6 +31,9 @@ export const IPC_CHANNELS = {
   mcp: {
     testConnection: 'mcp:testConnection',
     getStatus: 'mcp:getStatus'
+  },
+  ollama: {
+    getStatus: 'ollama:getStatus'
   }
 } as const
 
@@ -41,3 +44,4 @@ export type IpcChannel =
   | (typeof IPC_CHANNELS.logs)[keyof typeof IPC_CHANNELS.logs]
   | (typeof IPC_CHANNELS.settings)[keyof typeof IPC_CHANNELS.settings]
   | (typeof IPC_CHANNELS.mcp)[keyof typeof IPC_CHANNELS.mcp]
+  | (typeof IPC_CHANNELS.ollama)[keyof typeof IPC_CHANNELS.ollama]

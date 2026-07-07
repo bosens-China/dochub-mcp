@@ -28,6 +28,8 @@ export function toDocSource(record: SourceRecord): DocSource {
     failedCount: record.sync.failedUrlCount,
     crawlMode: record.crawl.mode,
     spineColor: spineColorForId(record.id),
+    scheduleEnabled: record.schedule.enabled,
+    nextRunAt: record.schedule.nextRunAt,
     needsSpa: record.sync.needsSpa
   }
 }
@@ -43,7 +45,8 @@ export function toSourceDetail(record: SourceRecord): SourceDetail {
     maxPages: record.crawl.maxPages,
     siteTitle: record.discovery.siteTitle,
     siteCharset: record.discovery.charset,
-    siteLang: record.discovery.lang
+    siteLang: record.discovery.lang,
+    schedule: record.schedule
   }
 }
 

@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
-import { dirname } from 'path'
+import { dirname, resolve } from 'path'
 import { parseAppConfig, type AppConfig } from '@shared/types/config'
 import { getConfigPath, getDataDir, getIndexDir, getSourcesDir } from './paths'
 
@@ -32,6 +32,15 @@ export async function saveConfig(config: AppConfig): Promise<void> {
   const path = getConfigPath(config)
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
+}
+
+export async function saveConfigReference(config: AppConfig): Promise<void> {
+  const defaultPath = getConfigPath()
+  const targetPath = getConfigPath(config)
+  if (resolve(defaultPath) === resolve(targetPath)) return
+
+  await mkdir(dirname(defaultPath), { recursive: true })
+  await writeFile(defaultPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
 }
 
 export function mergeCrawlConfig(

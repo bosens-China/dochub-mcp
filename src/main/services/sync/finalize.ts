@@ -17,6 +17,7 @@ import {
 } from '../converter/link-localizer'
 import { splitIntoChunks, chunkMaxChars } from '../indexer/chunker'
 import { indexDocument } from '../indexer/fts'
+import { enqueueDocumentVectorIndex } from '../indexer/vector-queue'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 
@@ -108,10 +109,13 @@ export async function finalizeSourceDocuments(
     })
 
     const localizedHash = contentHash(localizedBody)
+    const sourceContentHash = parsed.frontmatter.sourceContentHash ?? `sha256:${entry.hash}`
     const frontmatter = {
       ...parsed.frontmatter,
       originalUrl: url,
       contentHash: `sha256:${localizedHash}`,
+      sourceContentHash,
+      language: parsed.frontmatter.language ?? record.discovery.lang,
       syncedAt: new Date().toISOString()
     }
 
@@ -119,6 +123,14 @@ export async function finalizeSourceDocuments(
 
     const chunks = splitIntoChunks(localizedBody, chunkMaxChars(config))
     indexDocument(sourceId, entry.path, frontmatter.title, localizedHash, chunks, config)
+    enqueueDocumentVectorIndex(
+      sourceId,
+      entry.path,
+      frontmatter.title,
+      localizedHash,
+      chunks,
+      config
+    )
 
     documents.push({
       url,

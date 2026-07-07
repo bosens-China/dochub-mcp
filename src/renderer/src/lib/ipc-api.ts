@@ -7,7 +7,9 @@ import type {
   DocSource,
   DocTreeNode,
   McpStatus,
+  OllamaStatus,
   SearchResult,
+  SearchMode,
   SourceDetail,
   SpaDetectionResult,
   SyncLogEntry,
@@ -78,6 +80,10 @@ export function fetchMcpStatus(): Promise<McpStatus> {
   return getApi().getMcpStatus()
 }
 
+export function fetchOllamaStatus(): Promise<OllamaStatus> {
+  return getApi().getOllamaStatus()
+}
+
 export function fetchSettings(): Promise<AppSettings> {
   return getApi().getSettings()
 }
@@ -90,6 +96,13 @@ export function testMcpConnection(host: string, port: number): Promise<boolean> 
   return getApi().testMcpConnection(host, port)
 }
 
-export function searchDocuments(query: string, sourceId: string | null): Promise<SearchResult[]> {
-  return getApi().searchDocuments(query, sourceId)
+export function searchDocuments(
+  query: string,
+  sourceId: string | null,
+  mode?: SearchMode,
+  limit?: number,
+  rerank?: boolean,
+  minScore?: number
+): Promise<SearchResult[]> {
+  return getApi().searchDocuments(query, sourceId, mode, limit, rerank, minScore)
 }
