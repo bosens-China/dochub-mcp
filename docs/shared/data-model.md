@@ -16,7 +16,7 @@
 │           └── guide/
 │               └── index.md
 └── .index/
-    ├── fts.db                  # SQLite FTS5
+    ├── fts.db                  # SQLite FTS5 + sqlite-vec 向量索引
     └── checkpoints/
         └── {sourceId}.json     # 爬取断点
 ```
@@ -32,7 +32,7 @@ interface SpaDetectionSnapshot {
   detectedAt: string
   seedUrl: string
   confidence: 'likely_ssr' | 'uncertain' | 'likely_spa'
-  score: number                // 0–100
+  score: number // 0–100
   recommendedMode: 'ssr' | 'spa' | 'auto'
   userConfirmedMode?: 'ssr' | 'spa' | 'auto'
   signals: { id: string; hit: boolean; label: string }[]
@@ -73,6 +73,12 @@ interface Source {
     pageCount: number
     failedUrlCount: number
   }
+  schedule: {
+    enabled: boolean
+    interval: number
+    unit: 'hour' | 'day' | 'week' | 'month'
+    nextRunAt: string | null
+  }
   createdAt: string
   updatedAt: string
 }
@@ -98,7 +104,7 @@ interface DiscoveryCache {
   llmsFull?: {
     url: string
     raw: string
-    parsedUrls: string[]        // 解析成功的 URL
+    parsedUrls: string[] // 解析成功的 URL
     parseOk: boolean
   }
   llms?: {
@@ -124,6 +130,7 @@ sourceUrl: https://electron-vite.org/guide/
 originalUrl: https://electron-vite.org/guide/introduction
 title: Introduction
 contentHash: sha256:abc123...
+sourceContentHash: sha256:def456...
 syncedAt: 2026-06-26T10:00:00Z
 language: en
 needsSpa: false
@@ -153,10 +160,10 @@ electron-vite (23 pages, synced 2026-06-26)
 
 ```typescript
 interface SourceMetaDocument {
-  url: string                     // 原始页面 URL
-  path: string                    // docs/ 下相对路径，如 docs/guide/index.md
+  url: string // 原始页面 URL
+  path: string // docs/ 下相对路径，如 docs/guide/index.md
   title: string
-  contentHash: string             // sha256:...
+  contentHash: string // sha256:...
   syncedAt: string
 }
 
@@ -164,8 +171,8 @@ interface SourceMeta {
   sourceId: string
   name: string
   seedUrl: string
-  scopePrefix: string             // path-only，如 /guide/
-  origin: string                  // 如 https://electron-vite.org
+  scopePrefix: string // path-only，如 /guide/
+  origin: string // 如 https://electron-vite.org
   updatedAt: string
   pageCount: number
   urlIndex: Record<string, string> // url → path，快速查找
@@ -208,10 +215,11 @@ interface Checkpoint {
   startedAt: string
   updatedAt: string
   status: 'running' | 'paused'
-  pending: string[]             // 待爬 URL
+  pending: string[] // 待爬 URL
   completed: Record<string, { hash: string; path: string }>
+  previousCompleted: Record<string, { hash: string; path: string }>
   failed: Record<string, { attempts: number; lastError: string }>
-  domainFailureCount: number    // 当前域名累计失败 URL 数
+  domainFailureCount: number // 当前域名累计失败 URL 数
 }
 ```
 
@@ -238,7 +246,47 @@ CREATE TABLE documents_meta (
 );
 ```
 
-## 9. Chunk 规则
+## 10. 向量索引表结构（v2）
+
+向量索引与 FTS 共用 `.index/fts.db`。`document_vectors` 由 `sqlite-vec` 提供，`vector_chunks`
+保存 rowid 到文档 chunk 的映射、增量 hash 和索引状态。
+
+```sql
+CREATE TABLE vector_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE vector_chunks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vector_rowid INTEGER UNIQUE,
+  source_id TEXT NOT NULL,
+  doc_path TEXT NOT NULL,
+  chunk_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  chunk_hash TEXT NOT NULL,
+  embedding_model TEXT NOT NULL,
+  dimension INTEGER NOT NULL,
+  status TEXT NOT NULL, -- indexed | index_pending
+  error TEXT,
+  updated_at TEXT NOT NULL,
+  UNIQUE(source_id, doc_path, chunk_id, embedding_model)
+);
+
+CREATE VIRTUAL TABLE document_vectors USING vec0(
+  embedding float[N] distance_metric=cosine,
+  source_id text
+);
+```
+
+- `vector_meta.embedding_model` / `embedding_dimension` 记录当前可用索引模型与维度。
+- 文档内容不变时，`chunk_hash` 命中会跳过 embed。
+- embed 失败时写入 `status = index_pending`，下次同步同一文档时重试。
+- 模型或维度不匹配时，语义/混合搜索返回 `VECTOR_INDEX_NOT_AVAILABLE`。
+
+## 11. Chunk 规则
 
 ```
 输入：MD 文档全文
@@ -251,7 +299,7 @@ CREATE TABLE documents_meta (
 
 默认 `chunk.maxChars = 10000`，可在 `config.json` 修改。
 
-## 10. 同步日志 `sync.log.jsonl`
+## 12. 同步日志 `sync.log.jsonl`
 
 每行一条 JSON：
 
@@ -268,13 +316,13 @@ CREATE TABLE documents_meta (
 
 `action` 枚举：`fetch` | `skip` | `update` | `delete` | `fail` | `domain_halt`
 
-## 11. 源命名规则
+## 13. 源命名规则
 
 - 默认名称：从 seed URL 生成，如 `electron-vite-guide`
 - 用户可在 UI 修改为任意显示名（如 `langchain`）
 - `id` 内部唯一，创建后不变
 
-## 12. 相关文档
+## 14. 相关文档
 
 - [v1 PRD](../v1/prd.md)
 - [config.md](./config.md)

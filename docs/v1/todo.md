@@ -46,7 +46,7 @@
 - [x] robots.txt 解析与开关
 - [x] 429 Retry-After 处理
 - [x] @mdream/js HTML → MD（turndown fallback）
-- [ ] Readability 预处理（可选，噪声页面）
+- [x] Readability 预处理（可选，噪声页面）
 - [x] 链接本地化改写
 - [x] 单 URL 重试（3 次）
 - [x] 域名熔断（3 个不同 URL 失败）
@@ -86,7 +86,7 @@
 - [x] 源管理页（添加/编辑/删除/同步）
 - [x] 文档浏览页（树 + MD 预览，支持从搜索跳转定位）
 - [x] 搜索页（关键词检索 + 按源过滤 + snippet 高亮）
-- [x] 设置页（数据目录、MCP、爬取、Header、robots）（Header 全局默认待 UI 补全）
+- [x] 设置页（数据目录、MCP、爬取、Header、robots）
 - [x] 同步进度与日志页
 - [x] 系统托盘（macOS / Windows / Linux）
 - [x] 关窗 → 托盘，不退出
@@ -97,8 +97,8 @@
 - [x] 单元测试：URL scope 过滤、chunk 切分、hash 对比、SPA 检测、导航、站点元信息、discovery 缓存
 - [x] 集成测试：完整同步流程（`runner-e2e.test.ts`）
 - [ ] MCP 手动测试（Cursor 接入）
-- [ ] electron-builder 三平台打包
-- [ ] README 安装与 Cursor 配置说明
+- [ ] electron-builder 三平台打包（Windows x64 installer 已验证；macOS / Linux 待目标平台验证）
+- [x] README 安装与 Cursor 配置说明
 
 ## 推荐测试站点
 

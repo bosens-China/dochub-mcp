@@ -41,8 +41,27 @@
     "minBodyCharsForSsr": 500,
     "autoRetryMinMdChars": 200
   },
+  "spaRender": {
+    "timeoutMs": 30000,
+    "waitUntil": "networkidle",
+    "settleMs": 500,
+    "maxPages": 3
+  },
   "ollama": {
-    "enabled": false
+    "enabled": false,
+    "baseUrl": "http://127.0.0.1:11434",
+    "embeddingModel": "nomic-embed-text",
+    "embeddingConcurrency": 2,
+    "llmModel": "qwen2.5:3b",
+    "queryTranslation": {
+      "enabled": false
+    },
+    "rerank": {
+      "enabled": false,
+      "model": "bge-reranker-v2-m3",
+      "minScore": 0.6,
+      "topK": 20
+    }
   },
   "ui": {
     "closeToTray": true,
@@ -57,18 +76,18 @@
 
 ### 顶层
 
-| 字段 | 类型 | 默认 | 说明 |
-|------|------|------|------|
+| 字段      | 类型   | 默认       | 说明           |
+| --------- | ------ | ---------- | -------------- |
 | `dataDir` | string | `~/dochub` | 数据存储根目录 |
 
 ### `mcp`
 
-| 字段 | 类型 | 默认 | 说明 |
-|------|------|------|------|
-| `enabled` | boolean | `true` | **是否在 UI/运行时开启 MCP 服务**；false 时不监听端口 |
-| `host` | string | `127.0.0.1` | 绑定地址，v1 固定 localhost |
-| `port` | number | `8276` | MCP 监听端口 |
-| `autoStart` | boolean | `true` | 应用启动且 `enabled=true` 时自动启动 MCP |
+| 字段        | 类型    | 默认        | 说明                                                  |
+| ----------- | ------- | ----------- | ----------------------------------------------------- |
+| `enabled`   | boolean | `true`      | **是否在 UI/运行时开启 MCP 服务**；false 时不监听端口 |
+| `host`      | string  | `127.0.0.1` | 绑定地址，v1 固定 localhost                           |
+| `port`      | number  | `8276`      | MCP 监听端口                                          |
+| `autoStart` | boolean | `true`      | 应用启动且 `enabled=true` 时自动启动 MCP              |
 
 **UI 行为：**
 
@@ -92,34 +111,34 @@
 
 ### `chunk`
 
-| 字段 | 类型 | 默认 | 说明 |
-|------|------|------|------|
+| 字段       | 类型   | 默认    | 说明                                           |
+| ---------- | ------ | ------- | ---------------------------------------------- |
 | `maxChars` | number | `10000` | 单 chunk 最大字符数；超出则按段落/标题语义切分 |
 
 ### `crawl` — 全局爬虫配置
 
-| 字段 | 类型 | 默认 | 说明 |
-|------|------|------|------|
-| `respectRobots` | boolean | `true` | 是否遵守 robots.txt；UI 可关闭 |
-| `maxRetriesPerUrl` | number | `3` | 单 URL 最大重试次数 |
-| `domainFailureThreshold` | number | `3` | 域名熔断：累计 N 个不同 URL 失败后停止该域名 |
-| `concurrency` | number | `3` | **并发爬取数**（同时 in-flight 的请求/page 数） |
-| `rateLimit` | object | 见下 | **请求间隔策略** |
-| `requestTimeoutMs` | number | `30000` | 单次请求超时（毫秒） |
-| `maxRedirects` | number | `5` | 最大重定向次数 |
-| `userAgent` | string | DocHub/1.0 … | User-Agent；空则使用内置默认 |
-| `defaultHeaders` | object | `{}` | 全局默认 HTTP Header |
+| 字段                     | 类型    | 默认         | 说明                                            |
+| ------------------------ | ------- | ------------ | ----------------------------------------------- |
+| `respectRobots`          | boolean | `true`       | 是否遵守 robots.txt；UI 可关闭                  |
+| `maxRetriesPerUrl`       | number  | `3`          | 单 URL 最大重试次数                             |
+| `domainFailureThreshold` | number  | `3`          | 域名熔断：累计 N 个不同 URL 失败后停止该域名    |
+| `concurrency`            | number  | `3`          | **并发爬取数**（同时 in-flight 的请求/page 数） |
+| `rateLimit`              | object  | 见下         | **请求间隔策略**                                |
+| `requestTimeoutMs`       | number  | `30000`      | 单次请求超时（毫秒）                            |
+| `maxRedirects`           | number  | `5`          | 最大重定向次数                                  |
+| `userAgent`              | string  | DocHub/1.0 … | User-Agent；空则使用内置默认                    |
+| `defaultHeaders`         | object  | `{}`         | 全局默认 HTTP Header                            |
 
 ### `crawl.rateLimit` — 请求间隔
 
 控制每个请求**完成之后**到下一个请求**开始之前**的等待时间（与 concurrency 配合使用）。
 
-| 字段 | 类型 | 默认 | 说明 |
-|------|------|------|------|
-| `mode` | `"fixed"` \| `"random"` | `"random"` | 间隔模式 |
-| `fixedMs` | number | `500` | `mode=fixed` 时固定间隔（毫秒） |
-| `randomMinMs` | number | `300` | `mode=random` 时最小间隔（毫秒） |
-| `randomMaxMs` | number | `1500` | `mode=random` 时最大间隔（毫秒） |
+| 字段          | 类型                    | 默认       | 说明                             |
+| ------------- | ----------------------- | ---------- | -------------------------------- |
+| `mode`        | `"fixed"` \| `"random"` | `"random"` | 间隔模式                         |
+| `fixedMs`     | number                  | `500`      | `mode=fixed` 时固定间隔（毫秒）  |
+| `randomMinMs` | number                  | `300`      | `mode=random` 时最小间隔（毫秒） |
+| `randomMaxMs` | number                  | `1500`     | `mode=random` 时最大间隔（毫秒） |
 
 **行为说明：**
 
@@ -138,17 +157,28 @@ mode=random → 每次等待 uniform(randomMinMs, randomMaxMs)
 
 - 收到 `Retry-After` header 时，等待指定时间后再重试（不计入 domainFailureThreshold，计入单 URL 重试）
 
-### `spaDetection` — SPA/SSR 侦测
+### `spaDetection` — SPA/SSR 侦测（顶层）
 
-| 字段 | 类型 | 默认 | 说明 |
-|------|------|------|------|
-| `alwaysConfirm` | boolean | `false` | 即使侦测为 SSR 也弹窗让用户确认 |
-| `ssrScoreMax` | number | `30` | score ≤ 此值 → `likely_ssr` |
-| `spaScoreMin` | number | `61` | score ≥ 此值 → `likely_spa` |
-| `minBodyCharsForSsr` | number | `500` | 启发式：低于此正文长度倾向 SPA |
-| `autoRetryMinMdChars` | number | `200` | v2 `auto` 模式：MD 短于此值且具 SPA 信号则 Playwright 重抓 |
+| 字段                  | 类型    | 默认    | 说明                                                       |
+| --------------------- | ------- | ------- | ---------------------------------------------------------- |
+| `alwaysConfirm`       | boolean | `false` | 即使侦测为 SSR 也弹窗让用户确认                            |
+| `ssrScoreMax`         | number  | `30`    | score ≤ 此值 → `likely_ssr`                                |
+| `spaScoreMin`         | number  | `61`    | score ≥ 此值 → `likely_spa`                                |
+| `minBodyCharsForSsr`  | number  | `500`   | 启发式：低于此正文长度倾向 SPA                             |
+| `autoRetryMinMdChars` | number  | `200`   | v2 `auto` 模式：MD 短于此值且具 SPA 信号则 Playwright 重抓 |
 
 详见 [spa-detection.md](./spa-detection.md)。
+
+### `spaRender` — Playwright 渲染（顶层，v2）
+
+| 字段        | 类型                                                | 默认          | 说明                          |
+| ----------- | --------------------------------------------------- | ------------- | ----------------------------- |
+| `timeoutMs` | number                                              | `30000`       | `page.goto` 超时              |
+| `waitUntil` | `"domcontentloaded"` \| `"load"` \| `"networkidle"` | `networkidle` | Playwright 页面等待条件       |
+| `settleMs`  | number                                              | `500`         | 页面加载后额外等待毫秒数      |
+| `maxPages`  | number                                              | `3`           | 共享 Browser 下并发 Page 上限 |
+
+`crawl.mode=spa` 时始终使用 Playwright；`crawl.mode=auto` 时先用 undici SSR 抓取，若 Markdown 过短且命中 SPA 信号，则对该 URL 用 Playwright 重抓一次。
 
 **实现伪代码：**
 
@@ -200,15 +230,15 @@ async function waitBetweenRequests(config: CrawlConfig, robotsDelayMs?: number) 
 
 ### 源级额外字段
 
-| 字段 | 类型 | 默认 | 说明 |
-|------|------|------|------|
-| `mode` | `"auto"` \| `"ssr"` \| `"spa"` | `"auto"` | v1 仅 ssr/auto；v2 spa 生效 |
-| `concurrency` | number | 继承全局 | 覆盖全局并发 |
-| `rateLimit` | object | 继承全局 | 覆盖全局间隔策略 |
-| `customHeaders` | object | `{}` | 与 `defaultHeaders` 合并，源级优先 |
-| `excludePatterns` | string[] | `[]` | glob 排除 URL（picomatch 语法） |
-| `maxDepth` | number \| null | `null` | BFS 最大深度；null = 不限制 |
-| `maxPages` | number \| null | `null` | 最大抓取页数；null = 不限制 |
+| 字段              | 类型                           | 默认     | 说明                               |
+| ----------------- | ------------------------------ | -------- | ---------------------------------- |
+| `mode`            | `"auto"` \| `"ssr"` \| `"spa"` | `"auto"` | v1 仅 ssr/auto；v2 spa 生效        |
+| `concurrency`     | number                         | 继承全局 | 覆盖全局并发                       |
+| `rateLimit`       | object                         | 继承全局 | 覆盖全局间隔策略                   |
+| `customHeaders`   | object                         | `{}`     | 与 `defaultHeaders` 合并，源级优先 |
+| `excludePatterns` | string[]                       | `[]`     | glob 排除 URL（picomatch 语法）    |
+| `maxDepth`        | number \| null                 | `null`   | BFS 最大深度；null = 不限制        |
+| `maxPages`        | number \| null                 | `null`   | 最大抓取页数；null = 不限制        |
 
 > 自定义 Header 不保证绕过鉴权或解析成功。
 
@@ -259,22 +289,45 @@ async function waitBetweenRequests(config: CrawlConfig, robotsDelayMs?: number) 
 
 ---
 
-## `ollama`（v1 占位）
+## `ollama`（v2）
 
-| 字段 | 类型 | 默认 | 说明 |
-|------|------|------|------|
-| `enabled` | boolean | `false` | v1 仅占位，功能在 v2 实现 |
+| 字段                   | 类型    | 默认                     | 说明                                      |
+| ---------------------- | ------- | ------------------------ | ----------------------------------------- |
+| `enabled`              | boolean | `false`                  | 是否启用本机 Ollama 增强                  |
+| `baseUrl`              | string  | `http://127.0.0.1:11434` | Ollama HTTP API 地址                      |
+| `embeddingModel`       | string  | `nomic-embed-text`       | 嵌入模型，用于向量索引与语义搜索          |
+| `embeddingConcurrency` | number  | `2`                      | 后台 chunk embed 队列并发数，范围 `1`–`8` |
+| `llmModel`             | string  | `qwen2.5:3b`             | 小模型，用于 llms.txt 结构化和查询翻译    |
 
-v2 完整 schema 见 [v2/prd.md](../v2/prd.md)。
+同步完成后，FTS 索引与文档元数据会立即可用；向量索引进入后台队列异步完成。语义/Hybrid 检索需要等待对应 chunk 完成 embed，状态可在设置页或 `get_ollama_status` 查看。
+
+### `ollama.queryTranslation`
+
+| 字段      | 类型    | 默认    | 说明                           |
+| --------- | ------- | ------- | ------------------------------ |
+| `enabled` | boolean | `false` | 是否在检索前用小模型翻译 query |
+
+启用后，DocHub 会通过 `ollama.llmModel` 生成少量 query 变体（保留原 query，并尽量补英文翻译或技术术语改写），再对 keyword / semantic / hybrid 检索结果做 RRF 合并。翻译失败时自动退回原 query，不阻断搜索。
+
+### `ollama.rerank`
+
+| 字段       | 类型    | 默认                 | 说明                               |
+| ---------- | ------- | -------------------- | ---------------------------------- |
+| `enabled`  | boolean | `false`              | 是否对候选结果做 Rerank            |
+| `model`    | string  | `bge-reranker-v2-m3` | Rerank 模型名称                    |
+| `minScore` | number  | `0.6`                | 低于该分数的结果会被过滤，范围 0–1 |
+| `topK`     | number  | `20`                 | 进入 Rerank 的候选数量             |
+
+当前实现通过 Ollama `/api/chat` 调用 `rerank.model`，要求模型能返回 JSON relevance 分数；若模型不兼容或调用失败，会保留原排序。设置页会通过 `/api/tags` 拉取本机模型列表；Ollama 不可达时，语义能力应降级，关键词搜索不受影响。
 
 ---
 
 ## `ui`
 
-| 字段 | 类型 | 默认 | 说明 |
-|------|------|------|------|
-| `closeToTray` | boolean | `true` | 关闭窗口最小化到托盘 |
-| `language` | string | `zh-CN` | 客户端 UI 语言 |
+| 字段          | 类型    | 默认    | 说明                 |
+| ------------- | ------- | ------- | -------------------- |
+| `closeToTray` | boolean | `true`  | 关闭窗口最小化到托盘 |
+| `language`    | string  | `zh-CN` | 客户端 UI 语言       |
 
 ---
 
@@ -285,12 +338,14 @@ v2 完整 schema 见 [v2/prd.md](../v2/prd.md)。
   "schedule": {
     "enabled": false,
     "interval": 1,
-    "unit": "day"
+    "unit": "day",
+    "nextRunAt": null
   }
 }
 ```
 
 `unit` 枚举：`hour` | `day` | `week` | `month`
+`nextRunAt` 由 Main Process Scheduler 维护，UI 用于展示下次执行时间。
 
 ---
 

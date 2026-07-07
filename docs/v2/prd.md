@@ -100,6 +100,7 @@
     "enabled": true,
     "baseUrl": "http://127.0.0.1:11434",
     "embeddingModel": "nomic-embed-text",
+    "embeddingConcurrency": 2,
     "llmModel": "qwen2.5:3b",
     "queryTranslation": {
       "enabled": false
@@ -114,11 +115,11 @@
 }
 ```
 
-| 能力 | API | 用途 |
-|------|-----|------|
-| 嵌入 | `POST /api/embed` | chunk 向量化、语义检索 |
-| 小模型 | `POST /api/chat` | llms.txt 结构化、查询翻译 |
-| Rerank | Ollama 加载 rerank 模型 | 对候选 chunk 重打分 |
+| 能力   | API                     | 用途                      |
+| ------ | ----------------------- | ------------------------- |
+| 嵌入   | `POST /api/embed`       | chunk 向量化、语义检索    |
+| 小模型 | `POST /api/chat`        | llms.txt 结构化、查询翻译 |
+| Rerank | Ollama 加载 rerank 模型 | 对候选 chunk 重打分       |
 
 **参考实现：** [autodev-codebase](https://github.com/anrgct/autodev-codebase) Ollama embed + rerank 模式。
 
@@ -152,17 +153,28 @@ flowchart TD
 
 ### 3.4 SPA 爬取
 
-| 模式 | 行为 |
-|------|------|
-| `ssr` | 始终 undici + cheerio |
-| `spa` | 始终 Playwright |
+| 模式   | 行为                                                                      |
+| ------ | ------------------------------------------------------------------------- |
+| `ssr`  | 始终 undici + cheerio                                                     |
+| `spa`  | 始终 Playwright                                                           |
 | `auto` | SSR 优先；单页 MD < `autoRetryMinMdChars` 且具 SPA 信号 → Playwright 重抓 |
 
 Playwright 配置：
 
-- 复用单 Browser 实例，按 concurrency 开 page
-- 等待 `networkidle` 或文档站常见 selector（可配置 timeout）
+- 复用单 Browser 实例，按 `spaRender.maxPages` 管理 Page 池
+- 等待 `spaRender.waitUntil`（默认 `networkidle`），并受 `spaRender.timeoutMs` 控制
 - 渲染后 DOM → 同一套 mdream 流水线
+
+```json
+{
+  "spaRender": {
+    "timeoutMs": 30000,
+    "waitUntil": "networkidle",
+    "settleMs": 500,
+    "maxPages": 3
+  }
+}
+```
 
 侦测与用户确认流程见 [spa-detection.md](../shared/spa-detection.md)（v1 首屏侦测，v2 启用 Playwright）。
 
@@ -173,9 +185,7 @@ Playwright 配置：
 **Prompt 目标：** 从 raw text 提取 JSON 数组：
 
 ```json
-[
-  { "url": "https://example.com/docs/a", "title": "A", "section": "Guide" }
-]
+[{ "url": "https://example.com/docs/a", "title": "A", "section": "Guide" }]
 ```
 
 **后处理：** scope 过滤 → 去重 → 合并到 URL queue
@@ -192,11 +202,11 @@ Playwright 配置：
 }
 ```
 
-| unit | 说明 |
-|------|------|
-| `hour` | 每 N 小时 |
-| `day` | 每 N 天 |
-| `week` | 每 N 周 |
+| unit    | 说明                  |
+| ------- | --------------------- |
+| `hour`  | 每 N 小时             |
+| `day`   | 每 N 天               |
+| `week`  | 每 N 周               |
 | `month` | 每 N 月（按 30 天计） |
 
 - 应用托盘常驻时由 Main Process scheduler 触发
@@ -206,11 +216,11 @@ Playwright 配置：
 
 `search_documents` 扩展：
 
-| 参数 | v2 新增/变更 |
-|------|-------------|
-| `mode` | 支持 `semantic`、`hybrid` |
-| `rerank` | 可选 boolean，默认跟随全局配置 |
-| `minScore` | 可选，覆盖 rerank 阈值 |
+| 参数       | v2 新增/变更                   |
+| ---------- | ------------------------------ |
+| `mode`     | 支持 `semantic`、`hybrid`      |
+| `rerank`   | 可选 boolean，默认跟随全局配置 |
+| `minScore` | 可选，覆盖 rerank 阈值         |
 
 可选新增 `get_ollama_status`：Ollama 连通性、已配置模型。
 
@@ -225,29 +235,29 @@ Playwright 配置：
 
 ### 4.2 产品策略
 
-| 场景 | 行为 |
-|------|------|
-| 无 Ollama | 仅 keyword，**不支持跨语言** |
-| Ollama + 多语 embed | 跨语言**尽力支持** |
-| Ollama + 单语 embed | UI 警告，建议更换模型 |
+| 场景                  | 行为                             |
+| --------------------- | -------------------------------- |
+| 无 Ollama             | 仅 keyword，**不支持跨语言**     |
+| Ollama + 多语 embed   | 跨语言**尽力支持**               |
+| Ollama + 单语 embed   | UI 警告，建议更换模型            |
 | queryTranslation 开启 | 检索前翻译 query，提高跨语言召回 |
 
 ### 4.3 推荐模型
 
-| 用途 | 模型 | 说明 |
-|------|------|------|
-| 嵌入 | `nomic-embed-text` | 多语，Ollama 常用 |
-| 嵌入 | `bge-m3` | 多语 |
+| 用途   | 模型                 | 说明                       |
+| ------ | -------------------- | -------------------------- |
+| 嵌入   | `nomic-embed-text`   | 多语，Ollama 常用          |
+| 嵌入   | `bge-m3`             | 多语                       |
 | Rerank | `bge-reranker-v2-m3` | 多语 rerank，用户自行 pull |
-| 小模型 | `qwen2.5:3b` | llms 结构化 / 查询翻译 |
+| 小模型 | `qwen2.5:3b`         | llms 结构化 / 查询翻译     |
 
 ---
 
 ## 5. 非功能需求（v2 增量）
 
-| 类别 | 要求 |
-|------|------|
-| 性能 | 语义搜索 < 2s（含 Ollama embed query） |
+| 类别 | 要求                                      |
+| ---- | ----------------------------------------- |
+| 性能 | 语义搜索 < 2s（含 Ollama embed query）    |
 | 资源 | Playwright 内存可控；embed 队列可配置并发 |
 | 降级 | Ollama 不可达 → 自动降级 keyword，UI 提示 |
 

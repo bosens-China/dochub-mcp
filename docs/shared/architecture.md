@@ -53,11 +53,11 @@ flowchart TB
 
 ## 2. 进程模型
 
-| 进程 | 职责 |
-|------|------|
+| 进程             | 职责                             |
+| ---------------- | -------------------------------- |
 | **Main Process** | 爬取、索引、MCP、配置、托盘、IPC |
-| **Renderer** | UI 展示，通过 IPC 调用 Main |
-| **Preload** | 安全 IPC 桥接 |
+| **Renderer**     | UI 展示，通过 IPC 调用 Main      |
+| **Preload**      | 安全 IPC 桥接                    |
 
 MCP Server 运行在 Main Process 内，不单独起子进程。
 
@@ -152,30 +152,30 @@ sequenceDiagram
 
 完整选型说明与第三方对比（mdream / Jina Reader / Firecrawl）见 **[tech-stack.md](./tech-stack.md)**。
 
-| 层级 | 选型 | 说明 |
-|------|------|------|
-| 桌面框架 | Electron + electron-vite | 已有脚手架 |
-| UI | React | 已有脚手架 |
-| MCP | **Hono** + `@modelcontextprotocol/hono` + SDK | Streamable HTTP + `GET /health` |
-| 爬取调度 | 自研 Orchestrator | 并发、随机延迟、断点、熔断 |
-| HTTP | undici | 爬取请求，支持 customHeaders |
-| HTML 解析 | cheerio | SSR DOM、链接提取 |
-| MD 转换 | **@mdream/js**（主） / turndown（fallback） | LLM 优化输出，MIT |
-| 正文提取（可选） | @mozilla/readability | 噪声页面预处理 |
-| 索引 | better-sqlite3 + FTS5 | 关键词检索 |
-| Sitemap | sitemap-parser 或参考 mdream | XML 解析 |
+| 层级             | 选型                                           | 说明                            |
+| ---------------- | ---------------------------------------------- | ------------------------------- |
+| 桌面框架         | Electron + electron-vite                       | 已有脚手架                      |
+| UI               | React                                          | 已有脚手架                      |
+| MCP              | 官方 `@modelcontextprotocol/sdk` + Node `http` | Streamable HTTP + `GET /health` |
+| 爬取调度         | 自研 Orchestrator                              | 并发、随机延迟、断点、熔断      |
+| HTTP             | undici                                         | 爬取请求，支持 customHeaders    |
+| HTML 解析        | cheerio                                        | SSR DOM、链接提取               |
+| MD 转换          | **@mdream/js**（主） / turndown（fallback）    | LLM 优化输出，MIT               |
+| 正文提取（可选） | @mozilla/readability                           | 噪声页面预处理                  |
+| 索引             | better-sqlite3 + FTS5                          | 关键词检索                      |
+| Sitemap          | sitemap-parser 或参考 mdream                   | XML 解析                        |
 
 爬虫可配置项（并发、随机/固定间隔等）见 **[config.md](./config.md)**。
 
 ## 8. v2 预留扩展点
 
-| 扩展点 | v2 接入 |
-|--------|---------|
-| `crawler/renderer.ts` | Playwright SPA 渲染 |
-| `indexer/vector.ts` | sqlite-vec + Ollama embed |
-| `search/rerank.ts` | Ollama bge rerank |
-| `discovery/llm-struct.ts` | LLM 结构化 llms.txt |
-| `source/scheduler.ts` | 定时同步 |
+| 扩展点                    | v2 接入                       |
+| ------------------------- | ----------------------------- |
+| `crawler/spa-fetcher.ts`  | Playwright SPA 渲染与 Page 池 |
+| `indexer/vector.ts`       | sqlite-vec + Ollama embed     |
+| `search/rerank.ts`        | Ollama bge rerank             |
+| `discovery/llm-struct.ts` | LLM 结构化 llms.txt           |
+| `source/scheduler.ts`     | 定时同步                      |
 
 ## 9. 相关文档
 

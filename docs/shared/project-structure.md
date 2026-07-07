@@ -15,7 +15,7 @@ DocHub-MCP/
 │   ├── main/                      # ★ 「后端」：Electron 主进程
 │   │   ├── index.ts               # 应用入口：窗口、托盘、生命周期
 │   │   ├── services/              # 业务服务（爬虫、索引、MCP 等）
-│   │   │   ├── mcp/               # Hono app + MCP transport + lifecycle
+│   │   │   ├── mcp/               # Node http + MCP transport + lifecycle
 │   │   │   │   ├── server.ts
 │   │   │   │   ├── tools/
 │   │   │   │   └── lifecycle.ts   # start / stop / restart
@@ -54,11 +54,11 @@ DocHub-MCP/
 
 ## 2. 为什么放在 `src/main/services/` 而不是根目录 `backend/`
 
-| 方案 | 说明 |
-|------|------|
-| **`src/main/services/`（推荐）** | 符合 electron-vite 惯例；Main = Node 后端；打包配置简单 |
-| `src/backend/` | 可行，但需额外配置 alias 与 main 的 import 路径 |
-| 仓库根 `backend/` | 适合**独立 Node 服务**（如将来拆成 CLI + 桌面壳）；当前阶段过度设计 |
+| 方案                             | 说明                                                                |
+| -------------------------------- | ------------------------------------------------------------------- |
+| **`src/main/services/`（推荐）** | 符合 electron-vite 惯例；Main = Node 后端；打包配置简单             |
+| `src/backend/`                   | 可行，但需额外配置 alias 与 main 的 import 路径                     |
+| 仓库根 `backend/`                | 适合**独立 Node 服务**（如将来拆成 CLI + 桌面壳）；当前阶段过度设计 |
 
 若将来拆成「纯 CLI / 无 UI 的 headless 模式」，可把 `services/` 抽到 `packages/core/`，桌面端与 CLI 共用——v1 不必先做。
 
@@ -73,49 +73,38 @@ Renderer（设置页：MCP 开关 + 端口）
 Main index.ts
     └── services/mcp/lifecycle.ts
             ├── enabled=false → 不 listen
-            └── enabled=true  → Hono + @hono/node-server @ :8276/mcp
+            └── enabled=true  → Node http + StreamableHTTPServerTransport @ :8276/mcp
 ```
 
-### MCP 层代码结构（Hono）
+### MCP 层代码结构
 
 ```
 main/services/mcp/
-├── server.ts       # 创建 Hono app，注册路由
-├── routes/
-│   ├── mcp.ts      # /mcp → MCP transport
-│   └── health.ts   # GET /health
+├── lifecycle.ts    # Node http 服务启停、/mcp、/health
 ├── tools/          # MCP tool handlers
-└── lifecycle.ts    # start() / stop() / restart()
 ```
 
 依赖（v1）：
 
 ```json
 {
-  "hono": "^4",
-  "@hono/node-server": "^1",
-  "@modelcontextprotocol/server": "latest",
-  "@modelcontextprotocol/hono": "latest"
+  "@modelcontextprotocol/sdk": "latest"
 }
 ```
 
-MCP SDK 提供 **`WebStandardStreamableHTTPServerTransport`** + **`createMcpHonoApp`**，与 Hono 的 Web Standard `Request/Response` 模型一致，无需 Express。
+当前实现使用官方 **`StreamableHTTPServerTransport`**，在 Main Process 内通过 Node `http` 处理 `/mcp` 与 `/health`，无需额外 Web 框架。
 
 ```typescript
 // 示意（实现阶段）
-import { serve } from '@hono/node-server'
-import { McpServer, WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server'
-import { createMcpHonoApp } from '@modelcontextprotocol/hono'
+import { createServer } from 'node:http'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 
 const mcpServer = new McpServer({ name: 'dochub', version: '1.0.0' })
-const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined })
+const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
 await mcpServer.connect(transport)
-
-const app = createMcpHonoApp()
-app.get('/health', (c) => c.json({ status: 'ok', /* ... */ }))
-app.all('/mcp', (c) => transport.handleRequest(c.req.raw))
-
-// lifecycle.start(port) → serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 8276 })
+const server = createServer((req, res) => transport.handleRequest(req, res))
+// lifecycle.start(port) → server.listen(port, '127.0.0.1')
 ```
 
 路由详情见 [http-api.md](./http-api.md)。
@@ -126,18 +115,18 @@ MCP **必须支持 UI 开关**：用户可关闭以减少暴露面；关闭后 C
 
 ## 4. 模块职责速查
 
-| 目录 | 职责 |
-|------|------|
-| `main/services/mcp` | Hono：`/mcp` + `/health`、启停 |
-| `main/services/source` | 源配置、同步任务队列 |
-| `main/services/discovery` | URL 发现 |
-| `main/services/crawler` | HTTP/Playwright 抓取 |
-| `main/services/converter` | mdream 转换 |
-| `main/services/indexer` | SQLite FTS |
-| `main/services/search` | 关键词/语义检索 |
-| `main/ipc` | UI 调主进程的唯一入口 |
-| `renderer/pages` | 含 **设置 → MCP** 页 |
-| `shared/types` | `McpConfig`、`McpRuntimeStatus` |
+| 目录                      | 职责                                  |
+| ------------------------- | ------------------------------------- |
+| `main/services/mcp`       | Node `http`：`/mcp` + `/health`、启停 |
+| `main/services/source`    | 源配置、同步任务队列                  |
+| `main/services/discovery` | URL 发现                              |
+| `main/services/crawler`   | HTTP/Playwright 抓取                  |
+| `main/services/converter` | mdream 转换                           |
+| `main/services/indexer`   | SQLite FTS                            |
+| `main/services/search`    | 关键词/语义检索                       |
+| `main/ipc`                | UI 调主进程的唯一入口                 |
+| `renderer/pages`          | 含 **设置 → MCP** 页                  |
+| `shared/types`            | `McpConfig`、`McpRuntimeStatus`       |
 
 ---
 

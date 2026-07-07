@@ -43,7 +43,8 @@ flowchart TD
 
 **v2（有 Playwright）：**
 
-- 用户选 **SPA** 或 **auto + likely_spa** → 全源或按页走 Playwright
+- 用户选 **SPA** → 全源走 Playwright
+- 用户选 **auto** → SSR 优先，单页内容过短且命中 SPA 信号时按页 Playwright fallback
 
 ---
 
@@ -91,7 +92,7 @@ type SpaSignal = {
 | 31–60      | `uncertain`  | `auto`（v2）/ 提示用户确认     |
 | 61–100     | `likely_spa` | `spa`（v2）/ v1 警告后继续 SSR |
 
-阈值可在 `config.json` 的 `crawl.spaDetection` 中微调。
+阈值可在 `config.json` 的顶层 `spaDetection` 中微调。
 
 ---
 
@@ -105,7 +106,7 @@ type SpaSignal = {
 | `uncertain`  | **弹窗**，展示预览 + 三选一                     |
 | `likely_spa` | **弹窗**，默认高亮「SPA / Playwright」          |
 
-全局选项 `crawl.spaDetection.alwaysConfirm`（默认 `false`）：为 true 时即使 `likely_ssr` 也弹窗。
+全局选项 `spaDetection.alwaysConfirm`（默认 `false`）：为 true 时即使 `likely_ssr` 也弹窗。
 
 ### 4.2 弹窗内容
 
@@ -124,11 +125,11 @@ type SpaSignal = {
 
 ### 4.3 用户选项与 `crawl.mode`
 
-| 用户选择     | `crawl.mode` | v1 行为                               | v2 行为                    |
-| ------------ | ------------ | ------------------------------------- | -------------------------- |
-| 自动（推荐） | `auto`       | SSR；uncertain/spa 时标记 `needs_spa` | 按侦测/按页切换 Playwright |
-| 静态 SSR     | `ssr`        | 始终 undici                           | 始终 undici                |
-| SPA 渲染     | `spa`        | SSR 试抓 + 警告                       | 始终 Playwright            |
+| 用户选择     | `crawl.mode` | v1 行为                               | v2 行为                            |
+| ------------ | ------------ | ------------------------------------- | ---------------------------------- |
+| 自动（推荐） | `auto`       | SSR；uncertain/spa 时标记 `needs_spa` | SSR 优先，按页 Playwright fallback |
+| 静态 SSR     | `ssr`        | 始终 undici                           | 始终 undici                        |
+| SPA 渲染     | `spa`        | SSR 试抓 + 警告                       | 始终 Playwright                    |
 
 设置页提供 **「重新检测」** 按钮，重新跑首屏侦测。
 
@@ -148,7 +149,7 @@ type SpaSignal = {
 
 ## 6. 配置项
 
-见 [config.md](./config.md) 中 `crawl.spaDetection`。
+见 [config.md](./config.md) 中 `spaDetection` 与 `spaRender`。
 
 ---
 
